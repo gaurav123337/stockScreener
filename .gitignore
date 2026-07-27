@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Secrets & local settings — never commit broker credentials
+data/broker_settings.json
+
+# Runtime data / logs
+data/predictions.csv
+
+# Learned knowledge manifest (local state)
+knowledge_graph/.learn_manifest.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log

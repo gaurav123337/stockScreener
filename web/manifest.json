@@ -1,0 +1,19 @@
+{
+  "name": "stockScreener",
+  "short_name": "Screener",
+  "description": "Indian stock screener: buy/sell signals, targets, reasons, filters, self-learning.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
