@@ -8,9 +8,30 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from screener.indicators import add_all, rsi
+from screener.core.config import config
+from screener.core.container import container
+from screener.core.interfaces import MarketDataProvider, PredictionRepository, KnowledgeStore
+from screener.core.models import Action, Recommendation
+from screener.services.analysis_service import AnalysisService
+from screener.services.filter_service import FilterService, PredefinedFilter
+from screener.services.scoring_engine import ScoringEngine
 
-from screener.signals import analyze
-from screener import filters as F
+
+class MockDataProvider(MarketDataProvider):
+    """Mock data provider for testing."""
+
+    def __init__(self, history: pd.DataFrame | None = None, info: dict | None = None):
+        self._history = history
+        self._info = info or {}
+
+    def fetch_history(self, symbol: str, period: str = "1y", interval: str = "1d"):
+        return self._history
+
+    def fetch_info(self, symbol: str) -> dict:
+        return self._info
+
+    def normalize_symbol(self, symbol: str) -> str:
+        return symbol.upper()
 
 
 def make_df(prices, volumes=None):
@@ -35,38 +56,73 @@ def test_rsi_bounds():
 
 def test_buy_on_uptrend():
     prices = list(np.linspace(100, 160, 260))  # steady uptrend, enough for SMA200
-    rec = analyze("TEST.NS", make_df(prices), info={"pegRatio": 0.8, "returnOnEquity": 0.2})
-    assert rec.action in ("BUY", "HOLD"), rec.action
+    history = make_df(prices)
+    provider = MockDataProvider(history, info={"pegRatio": 0.8, "returnOnEquity": 0.2})
+    analysis = AnalysisService(data_provider=provider, scoring_engine=ScoringEngine(use_registry=False))
+    rec = analysis.analyze("TEST.NS")
+    assert rec.action in (Action.BUY, Action.HOLD), rec.action
     assert rec.score > 0, rec.score
     assert any("200-DMA" in r or "50-DMA" in r for r in rec.reasons)
-    if rec.action == "BUY":
+    if rec.action == Action.BUY:
         assert rec.target and rec.stop_loss and rec.target > rec.price > rec.stop_loss
-    print(f"  Uptrend -> {rec.action} score={rec.score:+.0f} reasons={len(rec.reasons)}")
+    print(f"  Uptrend -> {rec.action.value} score={rec.score:+.0f} reasons={len(rec.reasons)}")
 
 
 def test_sell_on_downtrend():
     prices = list(np.linspace(160, 100, 260))  # steady downtrend
-    rec = analyze("TEST.NS", make_df(prices), info={})
-    assert rec.action in ("SELL", "HOLD"), rec.action
+    history = make_df(prices)
+    provider = MockDataProvider(history, info={})
+    analysis = AnalysisService(data_provider=provider, scoring_engine=ScoringEngine(use_registry=False))
+    rec = analysis.analyze("TEST.NS")
+    assert rec.action in (Action.SELL, Action.HOLD), rec.action
     assert rec.score < 0, rec.score
-    if rec.action == "SELL":
+    if rec.action == Action.SELL:
         assert rec.target < rec.price < rec.stop_loss
-    print(f"  Downtrend -> {rec.action} score={rec.score:+.0f}")
+    print(f"  Downtrend -> {rec.action.value} score={rec.score:+.0f}")
 
 
 def test_filters():
+    filter_service = FilterService()
+
     row = {"rsi": 25, "score": 40, "roe": 0.2, "peg": 0.5,
            "above_sma50": True, "above_sma200": True, "golden_cross": True,
            "action": "BUY", "debt_to_equity": 50}
-    assert F.get_predefined("oversold")(row)
-    assert F.get_predefined("uptrend")(row)
-    assert F.get_predefined("value")(row)
-    assert F.get_predefined("quality")(row)
-    assert F.get_predefined("buy_signals")(row)
-    custom = F.compile_custom("rsi < 30 and roe > 0.15")
-    assert custom(row)
-    assert not F.compile_custom("rsi > 30")(row)
+
+    assert filter_service.get_filter("oversold").matches(row)
+    assert filter_service.get_filter("uptrend").matches(row)
+    assert filter_service.get_filter("value").matches(row)
+    assert filter_service.get_filter("quality").matches(row)
+    assert filter_service.get_filter("buy_signals").matches(row)
+
+    custom = filter_service.compile_custom("rsi < 30 and roe > 0.15")
+    assert custom.matches(row)
+    assert not filter_service.compile_custom("rsi > 30").matches(row)
     print("  Pre-defined + custom filters OK")
+
+
+def test_scoring_engine_pluggable():
+    """Verify that custom scorers can be registered and used."""
+    from screener.core.interfaces import ScoringStrategy
+    from screener.core.plugins import registry
+
+    class BonusScorer(ScoringStrategy):
+        @property
+        def name(self):
+            return "bonus"
+
+        def score(self, last, prev, info):
+            return 5.0, ["Bonus +5"]
+
+    registry.register_scorer(BonusScorer())
+    engine = ScoringEngine(use_registry=True)
+
+    df = make_df(list(np.linspace(100, 160, 260)))
+    df = add_all(df)
+    last, prev = df.iloc[-1], df.iloc[-2]
+
+    score, reasons = engine.total_score(last, prev, {})
+    assert "Bonus +5" in reasons
+    print(f"  Pluggable scorer OK (total={score:+.1f})")
 
 
 if __name__ == "__main__":
@@ -74,4 +130,5 @@ if __name__ == "__main__":
     test_buy_on_uptrend()
     test_sell_on_downtrend()
     test_filters()
+    test_scoring_engine_pluggable()
     print("ALL OFFLINE TESTS PASSED")

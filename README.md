@@ -7,15 +7,108 @@ loop. Available both as a **mobile-installable web app (PWA)** and a **CLI**.
 
 > ⚠️ Educational tool. **Not SEBI-registered investment advice.** Do your own research.
 
+---
+
+## 🏗️ Architecture (v0.3.0)
+
+The codebase has been refactored using **Clean Architecture** principles with a
+**plugin system** for extensibility. It is now highly reusable and maintainable.
+
+### Layers
+
+```
+┌─────────────────────────────────────────┐
+│  Presentation  │  api.py (FastAPI)      │  ← Web routes, request/response
+│                │  main.py (CLI)         │  ← Console output, Rich tables
+├─────────────────────────────────────────┤
+│  Services      │  AnalysisService       │  ← Business logic orchestration
+│                │  ScanService           │
+│                │  VerificationService   │
+│                │  KnowledgeService      │
+│                │  FilterService         │
+│                │  BrokerService         │
+├─────────────────────────────────────────┤
+│  Core          │  models.py (Pydantic)  │  ← Domain models, validation
+│                │  interfaces.py (ABC)   │  ← Contracts / ports
+│                │  config.py (Settings)  │  ← Centralized configuration
+│                │  container.py (DI)     │  ← Dependency injection
+│                │  plugins.py (Registry) │  ← Plugin registry
+├─────────────────────────────────────────┤
+│  Infrastructure                        │  ← External world adapters
+│                │  YahooDataProvider     │  ← MarketDataProvider impl
+│                │  CSVPredictionRepo     │  ← PredictionRepository impl
+│                │  MarkdownKnowledgeStore│  ← KnowledgeStore impl
+│                │  ZerodhaAdapter        │  ← BrokerAdapter impl
+│                │  AngelOneAdapter       │  ← BrokerAdapter impl
+└─────────────────────────────────────────┘
+```
+
+### Key Patterns
+
+| Pattern | Where | Benefit |
+|---------|-------|---------|
+| **Dependency Injection** | `core/container.py` | Testable, swappable implementations |
+| **Plugin Registry** | `core/plugins.py` | Add filters/scorers/brokers without modifying core |
+| **Repository** | `infrastructure/persistence/` | Abstract data storage (CSV → DB later) |
+| **Strategy** | `services/scoring_engine.py` | Pluggable scoring algorithms |
+| **Service Layer** | `services/` | Single place for business logic (no duplication) |
+| **Configuration** | `core/config.py` | Environment-aware, validated settings |
+
+### Project Layout
+
+```
+api.py                          # FastAPI backend (serves SPA + JSON APIs)
+main.py                         # CLI
+screener/
+  bootstrap.py                  # Wires all DI dependencies at startup
+  __init__.py
+  core/                         # Framework (no business logic)
+    config.py                   # Pydantic Settings — all config in one place
+    models.py                   # Pydantic domain models (validated, serializable)
+    interfaces.py               # Abstract base classes (ports)
+    container.py                # Lightweight DI container
+    plugins.py                  # Plugin registry for filters/scorers/brokers
+  infrastructure/               # Adapters to external world
+    data/yahoo_provider.py      # Yahoo Finance implementation
+    persistence/csv_repository.py # CSV/MD file storage
+  services/                     # Business logic orchestration
+    analysis_service.py         # Stock analysis (replaces duplicated logic)
+    scan_service.py             # Universe scanning
+    verification_service.py     # Prediction logging & verification
+    knowledge_service.py        # PDF/URL ingestion
+    filter_service.py           # Predefined + custom expression filters
+    broker_service.py           # Broker management (Zerodha, Angel One)
+    scoring_engine.py           # Pluggable scoring strategies
+  indicators.py                 # Technical indicators (unchanged)
+  universe.py                   # Nifty 50 symbol list (unchanged)
+web/                            # The SPA (PWA)
+  index.html
+  manifest.json
+  sw.js
+  static/                       # app.js, styles.css, icon.svg
+knowledge_graph/
+  objective.md
+  market_knowledge.md           # The "brain" (rules the engine follows)
+knowledge/                      # Drop PDFs/notes/transcripts here
+tests/
+  test_engine.py                # Offline tests with mocks
+data/                           # predictions.csv + broker_settings.json
+```
+
+---
+
 ## Install
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ## 🌐 Web App (SPA · installable on mobile)
+
 ```bash
 python api.py            # serves on http://localhost:8000
 ```
+
 Open **http://localhost:8000** in a browser. It's a single-page app with 5 tabs:
 - **Recommend** — type symbols → BUY/SELL/HOLD card with entry, target, stop-loss, R:R and reasons.
 - **Scan** — screen Nifty 50 (or your list) with a pre-defined filter chip or a custom expression, ranked by score.
@@ -35,12 +128,15 @@ It's a Progressive Web App (manifest + service worker), so it installs like a na
 - Rules are appended to `knowledge_graph/market_knowledge.md` (de-duplicated via a manifest).
 
 ## 🔌 Broker APIs (optional, better results)
+
 | Broker | Library | Notes |
 |---|---|---|
 | Zerodha Kite Connect | `pip install kiteconnect` | Daily login → access_token (expires each day). |
 | Angel One SmartAPI | `pip install smartapi-python pyotp` | client_code + PIN + TOTP secret. |
+
 Connect in the **Brokers** tab. Once connected, recommendations use **live broker LTP** and you can pull **holdings/positions**. If not connected, everything still works on free Yahoo data.
 
+---
 
 ## Commands
 
@@ -48,9 +144,6 @@ Connect in the **Brokers** tab. Once connected, recommendations use **live broke
 ```bash
 python main.py recommend RELIANCE TCS INFY
 ```
-Shows for each stock: action (BUY/SELL/HOLD), score, last price, and for BUY/SELL
-an **entry, target, stop-loss, risk:reward**, plus the **reasons** (trend vs
-50/200-DMA, RSI, MACD, volume, PEG/ROE/debt).
 
 ### 2) Scan a universe (default = Nifty 50)
 ```bash
@@ -65,60 +158,140 @@ python main.py scan --symbols RELIANCE TCS SBIN --filter buy_signals
 ```bash
 python main.py filters
 ```
-Built-ins: `oversold`, `uptrend`, `value`, `quality`, `momentum`,
-`near_52w_high`, `near_52w_low`, `buy_signals`, `sell_signals`.
 
-Custom filter fields: `score, price, rsi, pe, peg, roe, debt_to_equity, sma50,
-sma200, above_sma50, above_sma200, golden_cross, near_52w_high, near_52w_low`
-with `and / or / not` and `< <= > >= == !=`.
-
-### 4) Self-update from PDFs / notes (internet research, books, reports)
-Drop any `.pdf`, `.md`, or `.txt` into the `knowledge/` folder, then:
+### 4) Self-update from PDFs / notes
 ```bash
 python main.py learn
 ```
-It extracts market-relevant rules and appends them to
-`knowledge_graph/market_knowledge.md` (de-duplicated via a manifest).
 
 ### 5) Verify its own predictions
-Every BUY/SELL call is logged to `data/predictions.csv`. After the 30-day
-horizon, run:
 ```bash
 python main.py verify
 ```
-It re-fetches current prices and reports **hit-rate overall and by action**
-(target_hit / correct / stop_hit / wrong), so you can judge reliability.
+
+---
 
 ## How the recommendation works
+
 Score = **Trend** (price vs 50/200-DMA, golden/death cross) + **Momentum**
 (RSI, MACD cross) + **Volume** + **Fundamentals** (PEG, ROE, Debt/Equity).
 - Score ≥ +30 → **BUY**; ≤ −30 → **SELL**; else **HOLD**.
 - **Target** = nearer of 2×risk or 52-week high; **Stop-loss** = below 50-DMA or
   1.5×ATR (whichever is closer). Rules live in `knowledge_graph/market_knowledge.md`.
 
-## Project layout
-```
-api.py                     # FastAPI backend (serves SPA + JSON APIs)  ->  python api.py
-main.py                    # CLI
-screener/
-  data.py                  # yfinance fetch (ticker normalisation, retries)
-  indicators.py            # SMA/EMA/RSI/MACD/ATR/52w
-  signals.py               # recommendation engine (score -> BUY/SELL/HOLD)
-  filters.py               # pre-defined + safe custom filters
-  knowledge.py             # PDF/notes/URL/video-transcript ingestion -> KB
-  verify.py                # self-verification of predictions
-  brokers.py               # optional Zerodha / Angel One adapters
-  universe.py              # Nifty 50 symbol list
-web/                       # the SPA (PWA)
-  index.html               # app shell (5 tabs)
-  manifest.json            # PWA manifest (installable)
-  sw.js                    # service worker (offline shell, network-first API)
-  static/                  # app.js, styles.css, icon.svg
-knowledge_graph/
-  objective.md             # your goal
-  market_knowledge.md      # the "brain" (rules the engine follows)
-knowledge/                 # drop PDFs/notes/transcripts here, then `learn`
-data/                      # predictions.csv + broker_settings.json (auto-created)
+---
+
+## 🔧 Extending the Framework
+
+### Adding a new scoring strategy
+
+```python
+from screener.core.interfaces import ScoringStrategy
+from screener.core.plugins import registry
+
+class MyScorer(ScoringStrategy):
+    @property
+    def name(self):
+        return "my_scorer"
+
+    def score(self, last, prev, info):
+        if last.get("RSI14", 50) < 25:
+            return 15.0, ["Extreme oversold — high bounce probability"]
+        return 0.0, []
+
+registry.register_scorer(MyScorer())
 ```
 
+### Adding a new filter
 
+```python
+from screener.core.interfaces import FilterStrategy
+from screener.core.plugins import registry
+
+class MyFilter(FilterStrategy):
+    @property
+    def name(self):
+        return "my_filter"
+
+    @property
+    def description(self):
+        return "My custom screen"
+
+    def matches(self, row):
+        return row.get("rsi", 50) < 25 and row.get("score", 0) > 40
+
+registry.register_filter(MyFilter())
+```
+
+### Adding a new broker
+
+```python
+from screener.core.interfaces import BrokerAdapter
+from screener.core.plugins import registry
+
+class MyBroker(BrokerAdapter):
+    @property
+    def name(self):
+        return "mybroker"
+
+    # Implement is_connected, status, get_ltp, get_holdings, connect, disconnect
+    ...
+
+registry.register_broker(MyBroker())
+```
+
+### Swapping data providers (e.g., for testing)
+
+```python
+from screener.core.container import container
+from screener.core.interfaces import MarketDataProvider
+from mymodule import MyDataProvider
+
+container.register(MarketDataProvider, MyDataProvider)
+```
+
+---
+
+## Environment Variables
+
+All configuration can be overridden via environment variables with the `SCREENER_` prefix:
+
+```bash
+# Scoring thresholds
+SCREENER_SCORE_BUY_THRESHOLD=35
+SCREENER_SCORE_SELL_THRESHOLD=-35
+
+# Data fetching
+SCREENER_DATA_DEFAULT_PERIOD=2y
+SCREENER_DATA_MAX_WORKERS=12
+
+# Risk management
+SCREENER_RISK_ATR_MULTIPLIER=2.0
+SCREENER_RISK_RISK_REWARD_TARGET=2.5
+
+# Verification
+SCREENER_VERIFY_HORIZON_DAYS=45
+```
+
+---
+
+## Testing
+
+```bash
+python tests/test_engine.py
+```
+
+Tests use **mock data providers** so they run offline without hitting Yahoo Finance.
+
+---
+
+## Migration from v0.2.0
+
+- `screener/data.py` → `screener/infrastructure/data/yahoo_provider.py` (implements `MarketDataProvider`)
+- `screener/signals.py` → `screener/services/analysis_service.py` + `screener/services/scoring_engine.py`
+- `screener/filters.py` → `screener/services/filter_service.py` (plugin-based)
+- `screener/knowledge.py` → `screener/services/knowledge_service.py` + `screener/infrastructure/persistence/csv_repository.py`
+- `screener/verify.py` → `screener/services/verification_service.py` + `screener/infrastructure/persistence/csv_repository.py`
+- `screener/brokers.py` → `screener/services/broker_service.py` (adapter pattern)
+
+The old modules are kept for backward compatibility but are no longer used by the main entry points.

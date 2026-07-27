@@ -5,7 +5,6 @@ Open: http://localhost:8000
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File
@@ -14,61 +13,31 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from screener import data, filters as F, knowledge, verify as V, brokers
-from screener.indicators import add_all
-from screener.signals import analyze
-from screener.universe import NIFTY50
+from screener.bootstrap import bootstrap, get_service
+from screener.core.config import config
+from screener.services import (
+    AnalysisService,
+    BrokerService,
+    FilterService,
+    KnowledgeService,
+    ScanService,
+    VerificationService,
+)
+
+# Wire all dependencies
+bootstrap()
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
 
-app = FastAPI(title="stockScreener", version="0.2.0")
+app = FastAPI(title="stockScreener", version="0.3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
 
 
 # --------------------------------------------------------------------------- #
-# helpers
+# Request models
 # --------------------------------------------------------------------------- #
-def _rec_to_dict(symbol: str) -> dict:
-    sd = data.fetch_history(symbol, period="1y")
-    if not sd.ok:
-        return {"symbol": symbol.upper(), "error": sd.error}
-    info = data.fetch_info(symbol)
-    rec = analyze(sd.symbol, sd.history, info)
-    df = add_all(sd.history)
-    last = df.iloc[-1]
-    price = rec.price
-    live = brokers.get_ltp(symbol)  # use broker LTP if a broker is connected
-    if live:
-        price = round(live, 2)
-    m = rec.metrics
-    row = {
-        "symbol": sd.symbol, "name": m.get("name") or "", "sector": m.get("sector"),
-        "action": rec.action, "score": rec.score, "price": price,
-        "entry": rec.entry, "target": rec.target, "stop_loss": rec.stop_loss,
-        "rr": rec.risk_reward, "reasons": rec.reasons,
-        "rsi": m.get("rsi"), "pe": m.get("pe"), "peg": m.get("peg"),
-        "roe": m.get("roe"), "debt_to_equity": m.get("debt_to_equity"),
-        "sma50": m.get("sma50"), "sma200": m.get("sma200"), "atr": m.get("atr"),
-        "above_sma50": bool(m.get("sma50") and price > m["sma50"]),
-        "above_sma200": bool(m.get("sma200") and price > m["sma200"]),
-        "golden_cross": bool(m.get("sma50") and m.get("sma200") and m["sma50"] > m["sma200"]),
-        "near_52w_high": bool(last.get("High52") and price >= 0.95 * last["High52"]),
-        "near_52w_low": bool(last.get("Low52") and price <= 1.05 * last["Low52"]),
-    }
-    V.log_prediction(sd.symbol, rec.action, price, rec.target, rec.stop_loss)
-    return row
-
-
-# --------------------------------------------------------------------------- #
-# analysis APIs
-# --------------------------------------------------------------------------- #
-@app.get("/api/recommend/{symbol}")
-def recommend(symbol: str):
-    return _rec_to_dict(symbol)
-
-
 class ScanBody(BaseModel):
     symbols: list[str] | None = None
     filter: str | None = None
@@ -76,91 +45,8 @@ class ScanBody(BaseModel):
     top: int | None = None
 
 
-@app.post("/api/scan")
-def scan(body: ScanBody):
-    symbols = body.symbols or NIFTY50
-    predicate = None
-    if body.filter:
-        if body.filter not in F.PREDEFINED:
-            return JSONResponse({"error": f"unknown filter {body.filter}"}, 400)
-        predicate = F.get_predefined(body.filter)
-    elif body.where:
-        try:
-            predicate = F.compile_custom(body.where)
-        except Exception as e:
-            return JSONResponse({"error": f"bad expression: {e}"}, 400)
-
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        rows = list(ex.map(_rec_to_dict, symbols))
-    ok = [r for r in rows if not r.get("error")]
-    errs = [{"symbol": r["symbol"], "error": r["error"]} for r in rows if r.get("error")]
-    if predicate:
-        ok = [r for r in ok if predicate(r)]
-    ok.sort(key=lambda r: r.get("score") or 0, reverse=True)
-    if body.top:
-        ok = ok[: body.top]
-    return {"count": len(ok), "failed": errs, "results": ok}
-
-
-@app.get("/api/filters")
-def list_filters():
-    return {"predefined": [{"name": n, "desc": d} for n, d in F.list_predefined()],
-            "fields": ["score", "price", "rsi", "pe", "peg", "roe", "debt_to_equity",
-                       "sma50", "sma200", "above_sma50", "above_sma200",
-                       "golden_cross", "near_52w_high", "near_52w_low"]}
-
-
-@app.get("/api/verify")
-def verify():
-    def price_of(sym: str):
-        live = brokers.get_ltp(sym)
-        if live:
-            return live
-        sd = data.fetch_history(sym, period="5d")
-        return float(sd.history["Close"].iloc[-1]) if sd.ok else None
-    return V.verify(price_of)
-
-
-# --------------------------------------------------------------------------- #
-# knowledge / training APIs
-# --------------------------------------------------------------------------- #
-@app.post("/api/learn/file")
-async def learn_file(file: UploadFile = File(...)):
-    content = await file.read()
-    return knowledge.ingest_bytes(file.filename, content)
-
-
 class UrlBody(BaseModel):
     url: str
-
-
-@app.post("/api/learn/url")
-def learn_url(body: UrlBody):
-    return knowledge.ingest_url(body.url)
-
-
-@app.post("/api/learn")
-def learn_now():
-    return knowledge.learn(verbose=False)
-
-
-@app.get("/api/knowledge")
-def get_knowledge():
-    kb = knowledge.KB_FILE
-    return {"path": str(kb), "content": kb.read_text(encoding="utf-8") if kb.exists() else ""}
-
-
-# --------------------------------------------------------------------------- #
-# broker APIs
-# --------------------------------------------------------------------------- #
-@app.get("/api/brokers/instructions")
-def broker_instructions():
-    return brokers.INSTRUCTIONS
-
-
-@app.get("/api/brokers/status")
-def broker_status():
-    return brokers.status()
 
 
 class BrokerBody(BaseModel):
@@ -168,21 +54,145 @@ class BrokerBody(BaseModel):
     credentials: dict
 
 
+# --------------------------------------------------------------------------- #
+# Analysis APIs
+# --------------------------------------------------------------------------- #
+@app.get("/api/recommend/{symbol}")
+def recommend(symbol: str):
+    analysis = get_service(AnalysisService)
+    broker = get_service(BrokerService)
+    verification = get_service(VerificationService)
+
+    rec = analysis.analyze(symbol)
+    # Use broker LTP if available
+    live = broker.get_ltp(symbol)
+    if live and rec.error is None:
+        rec.price = round(live, 2)
+
+    if rec.error is None:
+        verification.log_prediction(rec)
+
+    return rec.to_scan_row()
+
+
+@app.post("/api/scan")
+def scan(body: ScanBody):
+    scan_service = get_service(ScanService)
+    filter_service = get_service(FilterService)
+
+    predicate = None
+    if body.filter:
+        filter_strategy = filter_service.get_filter(body.filter)
+        if not filter_strategy:
+            return JSONResponse({"error": f"unknown filter {body.filter}"}, 400)
+        predicate = filter_strategy.matches
+    elif body.where:
+        try:
+            expr_filter = filter_service.compile_custom(body.where)
+            predicate = expr_filter.matches
+        except Exception as e:
+            return JSONResponse({"error": f"bad expression: {e}"}, 400)
+
+    result = scan_service.scan(body.symbols, predicate, body.top)
+    return {
+        "count": len(result.matched),
+        "failed": result.failed,
+        "results": [r.to_scan_row() for r in result.matched],
+    }
+
+
+@app.get("/api/filters")
+def list_filters():
+    filter_service = get_service(FilterService)
+    return {
+        "predefined": filter_service.list_filters(),
+        "fields": filter_service.get_filter_fields(),
+    }
+
+
+@app.get("/api/verify")
+def verify():
+    verification = get_service(VerificationService)
+    broker = get_service(BrokerService)
+
+    def price_of(sym: str):
+        live = broker.get_ltp(sym)
+        if live:
+            return live
+        # Fallback to Yahoo
+        from screener.infrastructure.data.yahoo_provider import YahooDataProvider
+        provider = YahooDataProvider()
+        df = provider.fetch_history(sym, period="5d")
+        return float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
+
+    return verification.verify(price_of).model_dump()
+
+
+# --------------------------------------------------------------------------- #
+# Knowledge / Training APIs
+# --------------------------------------------------------------------------- #
+@app.post("/api/learn/file")
+async def learn_file(file: UploadFile = File(...)):
+    knowledge = get_service(KnowledgeService)
+    content = await file.read()
+    # Save to temp file then ingest
+    temp_path = config.knowledge_dir / file.filename
+    temp_path.write_bytes(content)
+    return knowledge.learn_from_file(temp_path).model_dump()
+
+
+@app.post("/api/learn/url")
+def learn_url(body: UrlBody):
+    knowledge = get_service(KnowledgeService)
+    return knowledge.learn_from_url(body.url).model_dump()
+
+
+@app.post("/api/learn")
+def learn_now():
+    knowledge = get_service(KnowledgeService)
+    return knowledge.learn_from_directory().model_dump()
+
+
+@app.get("/api/knowledge")
+def get_knowledge():
+    knowledge = get_service(KnowledgeService)
+    return {
+        "path": str(config.kb_file),
+        "content": knowledge.get_knowledge_content(),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Broker APIs
+# --------------------------------------------------------------------------- #
+@app.get("/api/brokers/instructions")
+def broker_instructions():
+    broker = get_service(BrokerService)
+    return broker.get_instructions()
+
+
+@app.get("/api/brokers/status")
+def broker_status():
+    broker = get_service(BrokerService)
+    return broker.get_status()
+
+
 @app.post("/api/brokers/connect")
 def broker_connect(body: BrokerBody):
-    if body.broker not in ("zerodha", "angelone"):
-        return JSONResponse({"error": "broker must be zerodha or angelone"}, 400)
-    return brokers.save_settings(body.broker, body.credentials)
+    broker = get_service(BrokerService)
+    return broker.connect(body.broker, body.credentials)
 
 
 @app.post("/api/brokers/disconnect/{broker}")
 def broker_disconnect(broker: str):
-    return brokers.disconnect(broker)
+    service = get_service(BrokerService)
+    return service.disconnect(broker)
 
 
 @app.get("/api/brokers/holdings")
 def broker_holdings():
-    return brokers.get_holdings()
+    broker = get_service(BrokerService)
+    return broker.get_holdings()
 
 
 # --------------------------------------------------------------------------- #
