@@ -9,3 +9,5 @@ Now provide some UI to make it easy for end user and it must be SPA so that it c
 And also provide a way to upload pdfs, blogs, videoes and urls so user can also train it and keep it updated.
 UI must be simple.
 Some users also has access of apis alos like angel one, zerodha paltform. So they can also integrated them for better results and provide instructions also to use the platform to its fullest.
+
+Ok, when scan happens and result came so on click of each record I should see the reason also which is not present currently.

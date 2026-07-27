@@ -1,4 +1,4 @@
-const CACHE = "screener-v1";
+const CACHE = "screener-v2";
 const SHELL = ["/", "/static/app.js", "/static/styles.css", "/static/icon.svg", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
@@ -13,18 +13,17 @@ self.addEventListener("activate", (e) => {
   );
 });
 
-// Network-first for API (fresh data), cache-first for static shell (fast/offline).
+// Network-first everywhere: fresh code & data, falling back to cache when offline.
 self.addEventListener("fetch", (e) => {
-  const url = new URL(e.request.url);
-  if (url.pathname.startsWith("/api/")) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-    return;
-  }
   e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copy));
+    fetch(e.request).then((res) => {
+      if (e.request.method === "GET" && res && res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy));
+      }
       return res;
-    }).catch(() => caches.match("/")))
+    }).catch(() =>
+      caches.match(e.request).then((hit) => hit || caches.match("/"))
+    )
   );
 });

@@ -132,7 +132,14 @@ def analyze(symbol: str, history: pd.DataFrame, info: dict | None = None) -> Rec
         return Recommendation(symbol, "HOLD", 0, np.nan, None, None, None, None,
                               [], {}, error="insufficient price history")
     info = info or {}
+    # Drop rows where Close is NaN — Yahoo appends an all-NaN placeholder row
+    # for the current/upcoming trading day, which would otherwise poison iloc[-1].
+    history = history.dropna(subset=["Close"])
+    if len(history) < 60:
+        return Recommendation(symbol, "HOLD", 0, np.nan, None, None, None, None,
+                              [], {}, error="insufficient price history")
     df = add_all(history)
+
     last, prev = df.iloc[-1], df.iloc[-2]
     price = float(last["Close"])
 
@@ -161,11 +168,13 @@ def analyze(symbol: str, history: pd.DataFrame, info: dict | None = None) -> Rec
     rr = None
     if action == "BUY":
         entry = round(price, 2)
-        # stop below 50-DMA or 1.5*ATR, whichever is nearer but sensible
-        candidates = [price - 1.5 * atr]
+        # stop below 50-DMA or 1.5*ATR, whichever is nearer but sensible —
+        # and always strictly BELOW the entry price
+        atr_stop = price - 1.5 * atr
+        candidates = [atr_stop]
         if sma50:
             candidates.append(sma50 * 0.98)
-        stop = round(max(candidates), 2)
+        stop = round(max(c for c in candidates if c < price), 2) if any(c < price for c in candidates) else round(atr_stop, 2)
         risk = price - stop
         tgt_candidates = [price + 2 * risk]
         if high52 and high52 > price:
@@ -174,12 +183,15 @@ def analyze(symbol: str, history: pd.DataFrame, info: dict | None = None) -> Rec
         rr = round((target - price) / risk, 2) if risk > 0 else None
     elif action == "SELL":
         entry = round(price, 2)
+        # stop always strictly ABOVE the entry price
         stop = round(price + 1.5 * atr, 2)
-        tgt_candidates = [price - 2 * (stop - price)]
+        risk = stop - price
+        tgt_candidates = [price - 2 * risk]
         if low52 and low52 < price:
             tgt_candidates.append(low52)
         target = round(max(tgt_candidates), 2)
-        rr = round((price - target) / (stop - price), 2) if stop > price else None
+        rr = round((price - target) / risk, 2) if risk > 0 else None
+
 
     metrics = {
         "rsi": round(float(last["RSI14"]), 1) if pd.notna(last.get("RSI14")) else None,

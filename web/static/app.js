@@ -146,15 +146,27 @@
         else {
           $("#scanOut").innerHTML = `<div class="tblwrap"><table class="tbl">
             <thead><tr><th>Symbol</th><th>Action</th><th>Score</th><th>Price</th><th>Target</th><th>Stop</th><th>R:R</th><th>RSI</th><th>PE</th><th>ROE</th></tr></thead>
-            <tbody>${res.results.map((r) => `<tr>
-              <td>${esc(r.symbol.replace(".NS", ""))}</td>
-              <td class="t${r.action}">${r.action}</td>
-              <td>${r.score > 0 ? "+" : ""}${fmt(r.score, 0)}</td>
-              <td>${fmt(r.price, 1)}</td><td>${fmt(r.target, 1)}</td><td>${fmt(r.stop_loss, 1)}</td>
-              <td>${r.rr ? fmt(r.rr, 2) : "-"}</td><td>${fmt(r.rsi, 0)}</td><td>${fmt(r.pe, 1)}</td><td>${pct(r.roe)}</td>
-            </tr>`).join("")}</tbody></table></div>
-            <div class="mini" style="margin-top:8px">${res.count} matched · ${res.failed.length} failed to fetch.</div>`;
+            <tbody>${res.results.map((r, i) => `
+              <tr class="rowbtn" data-i="${i}">
+                <td><span class="caret">▸</span> ${esc(r.symbol.replace(".NS", ""))}</td>
+                <td class="t${r.action}">${r.action}</td>
+                <td>${r.score > 0 ? "+" : ""}${fmt(r.score, 0)}</td>
+                <td>${fmt(r.price, 1)}</td><td>${fmt(r.target, 1)}</td><td>${fmt(r.stop_loss, 1)}</td>
+                <td>${r.rr ? fmt(r.rr, 2) : "-"}</td><td>${fmt(r.rsi, 0)}</td><td>${fmt(r.pe, 1)}</td><td>${pct(r.roe)}</td>
+              </tr>
+              <tr class="detail hidden" data-d="${i}"><td colspan="10">
+                ${(r.reasons && r.reasons.length)
+                  ? `<ul class="reasons">${r.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`
+                  : `<div class="mini">No specific reasons — mixed/neutral signals.</div>`}
+              </td></tr>`).join("")}</tbody></table></div>
+            <div class="mini" style="margin-top:8px">${res.count} matched · ${res.failed.length} failed to fetch. Tap a row for reasons.</div>`;
+          $("#scanOut").querySelectorAll("tr.rowbtn").forEach((tr) =>
+            tr.addEventListener("click", () => {
+              const d = $("#scanOut").querySelector(`tr.detail[data-d="${tr.dataset.i}"]`);
+              if (d) { d.classList.toggle("hidden"); tr.classList.toggle("open"); }
+            }));
         }
+
       } catch (e) { $("#scanOut").innerHTML = ""; toast(e.message); }
       $("#scanGo").disabled = false;
     });

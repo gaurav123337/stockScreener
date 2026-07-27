@@ -83,6 +83,15 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent2); }
 .tbl th { color: var(--muted); font-weight: 600; }
 .tblwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
 .tBUY { color: var(--green); font-weight: 700; } .tSELL { color: var(--red); font-weight: 700; } .tHOLD { color: var(--yellow); }
+/* expandable scan rows (tap for reasons) */
+.tbl tr.rowbtn { cursor: pointer; }
+.tbl tr.rowbtn:hover td { background: var(--card2); }
+.tbl tr.rowbtn.open .caret { display: inline-block; transform: rotate(90deg); }
+.tbl .caret { display: inline-block; color: var(--accent2); transition: transform .15s ease; }
+.tbl tr.detail td { text-align: left; white-space: normal; background: var(--card2); padding: 10px 12px; position: static; }
+
+.tbl tr.detail .reasons { margin: 0; }
+
 
 /* Toast */
 .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
