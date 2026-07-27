@@ -27,8 +27,17 @@ class AnalysisService:
         self._scorer = scoring_engine or ScoringEngine()
 
     def analyze(self, symbol: str) -> Recommendation:
-        """Produce a full recommendation for a symbol."""
-        history = self._data.fetch_history(symbol)
+        """Produce a full recommendation for a symbol.
+
+        Resolves the symbol first so that names without an exchange suffix
+        work on both NSE and BSE, and the returned symbol is the real ticker.
+        """
+        resolved = symbol
+        resolver = getattr(self._data, "resolve_symbol", None)
+        if callable(resolver):
+            resolved = resolver(symbol) or symbol
+
+        history = self._data.fetch_history(resolved)
         if history is None or history.empty or len(history) < 60:
             return Recommendation(
                 symbol=symbol.upper(),
@@ -49,7 +58,7 @@ class AnalysisService:
                 error="insufficient price history after cleaning",
             )
 
-        info = self._data.fetch_info(symbol)
+        info = self._data.fetch_info(resolved)
         df = add_all(history)
         last, prev = df.iloc[-1], df.iloc[-2]
         price = float(last["Close"])
@@ -73,7 +82,7 @@ class AnalysisService:
         metrics = self._build_metrics(price, last, info)
 
         return Recommendation(
-            symbol=self._data.normalize_symbol(symbol),
+            symbol=self._data.normalize_symbol(resolved),
             action=action,
             score=score,
             price=round(price, 2),

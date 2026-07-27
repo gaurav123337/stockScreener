@@ -2,11 +2,16 @@
 
 All application settings in one place, environment-variable aware,
 and type-validated. No more scattered hardcoded values.
+
+User overrides made via the dashboard are persisted to
+``data/user_config.json`` and re-applied on startup.
 """
 from __future__ import annotations
 
+import copy
+import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -147,11 +152,107 @@ class AppConfig(BaseSettings):
     def learn_manifest_file(self) -> Path:
         return self.knowledge_graph_dir / ".learn_manifest.json"
 
+    @property
+    def user_config_file(self) -> Path:
+        return self.data_dir / "user_config.json"
+
     def ensure_directories(self) -> None:
         """Create all required directories if they don't exist."""
         for d in (self.data_dir, self.knowledge_dir, self.knowledge_graph_dir):
             d.mkdir(parents=True, exist_ok=True)
 
+    # ------------------------------------------------------------------ #
+    # Dashboard-editable settings (get / update / reset)
+    # ------------------------------------------------------------------ #
+    _SECTIONS = ("data", "scoring", "risk", "knowledge", "verification")
+
+    @classmethod
+    def _defaults(cls) -> dict[str, Any]:
+        """Fresh-out-of-the-box defaults (no env vars, no user overrides)."""
+        return cls().editable_snapshot()
+
+    def editable_snapshot(self) -> dict[str, Any]:
+        """Current values of every dashboard-editable setting."""
+        snap: dict[str, Any] = {
+            section: getattr(self, section).model_dump() for section in self._SECTIONS
+        }
+        # frozenset isn't JSON-friendly
+        snap["knowledge"]["allowed_extensions"] = sorted(
+            snap["knowledge"]["allowed_extensions"]
+        )
+        snap["default_universe"] = list(self.default_universe)
+        return snap
+
+    def load_user_overrides(self) -> None:
+        """Re-apply persisted dashboard overrides (called at startup)."""
+        try:
+            if self.user_config_file.exists():
+                saved = json.loads(self.user_config_file.read_text(encoding="utf-8"))
+                if isinstance(saved, dict) and saved:
+                    self._apply(saved)
+        except Exception:
+            pass  # corrupt file -> keep booting with defaults
+
+    def update_settings(self, patch: dict[str, Any]) -> dict[str, Any]:
+        """Validate & apply a partial settings patch, then persist it.
+
+        Raises ValueError on unknown keys or invalid values.
+        """
+        if not isinstance(patch, dict) or not patch:
+            raise ValueError("empty settings payload")
+
+        allowed = self.editable_snapshot()
+        unknown = [k for k in patch if k not in allowed]
+        if unknown:
+            raise ValueError(f"unknown setting(s): {', '.join(sorted(unknown))}")
+
+        candidate = copy.deepcopy(allowed)
+        for key, value in patch.items():
+            if isinstance(value, dict) and isinstance(candidate.get(key), dict):
+                bad = [k for k in value if k not in candidate[key]]
+                if bad:
+                    raise ValueError(
+                        f"unknown {key} field(s): {', '.join(sorted(bad))}"
+                    )
+                candidate[key].update(value)
+            else:
+                candidate[key] = value
+
+        # Type-validate by rebuilding the sub-configs
+        validated: dict[str, Any] = {"default_universe": candidate["default_universe"]}
+        for section in self._SECTIONS:
+            model = type(getattr(self, section))
+            validated[section] = model(**candidate[section]).model_dump()
+
+        self._apply(validated)
+        self._persist(self.editable_snapshot())
+        return self.editable_snapshot()
+
+    def reset_settings(self) -> dict[str, Any]:
+        """Restore factory defaults and remove the persisted override file."""
+        defaults = self._defaults()
+        self._apply(defaults)
+        try:
+            self.user_config_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return self.editable_snapshot()
+
+    def _apply(self, values: dict[str, Any]) -> None:
+        for section in self._SECTIONS:
+            if section in values:
+                model = type(getattr(self, section))
+                setattr(self, section, model(**values[section]))
+        if "default_universe" in values:
+            self.default_universe = [str(s).strip().upper() for s in values["default_universe"] if str(s).strip()]
+
+    def _persist(self, values: dict[str, Any]) -> None:
+        self.ensure_directories()
+        self.user_config_file.write_text(
+            json.dumps(values, indent=2), encoding="utf-8"
+        )
+
 
 # Global config instance — import this everywhere
 config = AppConfig()
+config.load_user_overrides()

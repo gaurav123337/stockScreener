@@ -34,10 +34,20 @@
   $("#installBtn").addEventListener("click", async () => {
     if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; }
   });
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    // When a new service worker takes over, reload once to get fresh code.
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshing) return; refreshing = true; location.reload();
+    });
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if (e.data && e.data.type === "SW_UPDATED" && !refreshing) { refreshing = true; location.reload(); }
+    });
+  }
 
   // ---------- router ----------
-  const tabs = ["recommend", "scan", "train", "brokers", "guide"];
+  const tabs = ["recommend", "scan", "train", "brokers", "settings", "guide"];
   const go = (t) => { location.hash = "#/" + t; };
   window.addEventListener("hashchange", render);
   document.querySelectorAll(".tab").forEach((b) =>
@@ -114,6 +124,11 @@
     view.innerHTML = `
       <div class="section"><div class="h">Scan</div>
         <div class="sub">Screen Nifty 50 (or your list) with a filter, ranked by score.</div></div>
+      <div class="ac-wrap">
+        <input id="scanSearch" type="text" placeholder="🔍 Find a stock by name or symbol (e.g. Tata, HDFC, M&M)…" autocomplete="off" />
+        <div id="scanAc" class="ac-list hidden"></div>
+      </div>
+      <div style="height:8px"></div>
       <input id="scanSyms" type="text" placeholder="Symbols (blank = Nifty 50) e.g. RELIANCE TCS" />
       <div class="chip-row" id="filterChips">
         <button class="chip active" data-f="">All</button>
@@ -133,6 +148,45 @@
       chosen = b.dataset.f;
       document.querySelectorAll("#filterChips .chip").forEach((c) => c.classList.toggle("active", c === b));
     });
+
+    // --- stock search autocomplete ---
+    const sInput = $("#scanSearch"), sList = $("#scanAc");
+    let deb;
+    const hideAc = () => sList.classList.add("hidden");
+    const addSym = (sym) => {
+      const cur = $("#scanSyms").value.trim();
+      const toks = cur ? cur.split(/[\s,]+/).filter(Boolean) : [];
+      if (!toks.map((t) => t.toUpperCase()).includes(sym.toUpperCase())) toks.push(sym);
+      $("#scanSyms").value = toks.join(" ");
+      sInput.value = ""; hideAc(); $("#scanSyms").focus();
+    };
+    sInput.addEventListener("input", () => {
+      const q = sInput.value.trim();
+      clearTimeout(deb);
+      if (q.length < 2) { hideAc(); return; }
+      deb = setTimeout(async () => {
+        try {
+          const r = await api("/api/search?q=" + encodeURIComponent(q));
+          const res = r.results || [];
+          if (!res.length) { sList.innerHTML = `<div class="ac-empty">No matches for "${esc(q)}"</div>`; sList.classList.remove("hidden"); return; }
+          sList.innerHTML = res.map((x) => `
+            <div class="ac-item" data-sym="${esc(x.symbol)}">
+              <div><div class="ac-sym">${esc(x.symbol.replace(".NS","").replace(".BO",""))}</div>
+              <div class="ac-name">${esc(x.name)}</div></div>
+              <span class="ac-ex">${esc(x.exchange)}</span>
+            </div>`).join("");
+          sList.classList.remove("hidden");
+          sList.querySelectorAll(".ac-item").forEach((it) =>
+            it.addEventListener("click", () => addSym(it.dataset.sym)));
+        } catch (e) { /* ignore */ }
+      }, 220);
+    });
+    sInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); const f = sList.querySelector(".ac-item"); if (f) addSym(f.dataset.sym); }
+      if (e.key === "Escape") hideAc();
+    });
+    document.addEventListener("click", (e) => { if (!e.target.closest(".ac-wrap")) hideAc(); });
+
     $("#scanGo").addEventListener("click", async () => {
       const syms = $("#scanSyms").value.trim().split(/[\s,]+/).filter(Boolean);
       const where = $("#scanWhere").value.trim() || null;
@@ -276,6 +330,100 @@
     });
   };
 
+  // ---------- Settings ----------
+  const SETMETA = [
+    ["scoring", "Scoring & Signals", "How aggressively stocks are scored. Higher weights = that factor matters more."],
+    ["risk", "Risk & Trade Levels", "Stop-loss / target calculation."],
+    ["data", "Data Fetching", "History window and reliability for market data."],
+    ["knowledge", "Knowledge Base", "How training documents are ingested."],
+    ["verification", "Verification", "How prediction accuracy is measured."],
+  ];
+  const LABEL = {
+    buy_threshold: "BUY score threshold", sell_threshold: "SELL score threshold",
+    trend_weight_sma50: "Weight: above 50-DMA", trend_weight_sma200: "Weight: above 200-DMA",
+    trend_weight_cross: "Weight: golden/death cross", momentum_weight_rsi: "Weight: RSI momentum",
+    momentum_weight_macd: "Weight: MACD", momentum_weight_crossover: "Weight: MACD crossover",
+    volume_weight: "Weight: volume surge", fundamental_peg_weight: "Weight: PEG valuation",
+    fundamental_roe_weight: "Weight: ROE quality", fundamental_debt_weight: "Weight: low debt",
+    atr_multiplier: "ATR stop-loss multiplier", risk_reward_target: "Target risk:reward",
+    sma50_stop_discount: "50-DMA stop discount", default_period: "History period",
+    default_interval: "Candle interval", retry_attempts: "Retry attempts",
+    retry_pause_seconds: "Retry pause (sec)", max_workers: "Parallel fetch workers",
+    max_rules_per_doc: "Max rules / document", min_rule_length: "Min rule length",
+    max_rule_length: "Max rule length", allowed_extensions: "Allowed file types",
+    horizon_days: "Verify after (days)", default_universe: "Default scan universe (symbols)",
+  };
+  const lbl = (k) => LABEL[k] || k.replace(/_/g, " ");
+
+  const Settings = async () => {
+    view.innerHTML = `<div class="center"><span class="spinner"></span> Loading settings…</div>`;
+    let cur = {}, defs = {};
+    try { [cur, defs] = await Promise.all([api("/api/settings"), api("/api/settings/defaults")]); }
+    catch (e) { view.innerHTML = ""; return toast(e.message); }
+
+    const numField = (sec, key, val) => `
+      <div class="setrow">
+        <div class="setlab">${esc(lbl(key))}<span class="setdef">default ${esc(defs[sec][key])}</span></div>
+        <input class="setnum" type="number" step="any" data-sec="${sec}" data-key="${key}" value="${esc(val)}" />
+      </div>`;
+    const txtField = (sec, key, val) => `
+      <div class="setrow">
+        <div class="setlab">${esc(lbl(key))}<span class="setdef">default ${esc(defs[sec][key])}</span></div>
+        <input class="setnum" type="text" data-sec="${sec}" data-key="${key}" value="${esc(val)}" />
+      </div>`;
+
+    const sectionHtml = (sec, title, sub) => {
+      const body = Object.entries(cur[sec]).map(([k, v]) => {
+        if (Array.isArray(v)) return ""; // handled separately
+        return (typeof v === "number") ? numField(sec, k, v) : txtField(sec, k, v);
+      }).join("");
+      return `<div class="card"><div class="sym" style="margin-bottom:2px">${esc(title)}</div>
+        <div class="mini" style="margin-bottom:10px">${esc(sub)}</div>${body}</div>`;
+    };
+
+    view.innerHTML = `
+      <div class="section"><div class="h">Settings</div>
+        <div class="sub">Tune how the screener behaves. Changes apply immediately and are saved. Use Reset to restore factory defaults.</div></div>
+      ${SETMETA.map(([s, t, d]) => sectionHtml(s, t, d)).join("")}
+      <div class="card">
+        <div class="sym" style="margin-bottom:2px">${esc(lbl("default_universe"))}</div>
+        <div class="mini" style="margin-bottom:8px">Stocks scanned when the Scan symbol box is left empty. Separate with spaces or commas.</div>
+        <textarea id="setUniverse" rows="4">${esc(cur.default_universe.join(" "))}</textarea>
+        <div class="mini" style="margin-top:6px">Default: ${defs.default_universe.length} Nifty-50 stocks</div>
+      </div>
+      <div class="row">
+        <button id="setSave" class="btn">Save changes</button>
+        <button id="setReset" class="btn secondary">Reset to default</button>
+      </div>
+      <div style="height:14px"></div>`;
+
+    const collect = () => {
+      const patch = {};
+      view.querySelectorAll("input[data-sec]").forEach((inp) => {
+        const sec = inp.dataset.sec, key = inp.dataset.key;
+        let v = inp.value;
+        if (inp.type === "number") { v = v === "" ? null : +v; if (v === null || isNaN(v)) return; }
+        else if (key === "allowed_extensions") { v = v.split(/[\s,]+/).filter(Boolean); }
+        (patch[sec] = patch[sec] || {})[key] = v;
+      });
+      const uni = $("#setUniverse").value.trim().split(/[\s,]+/).filter(Boolean).map((s) => s.toUpperCase());
+      patch.default_universe = uni;
+      return patch;
+    };
+
+    $("#setSave").addEventListener("click", async () => {
+      $("#setSave").disabled = true;
+      try { await api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ patch: collect() }) });
+        toast("Settings saved"); Settings(); }
+      catch (e) { toast(e.message); $("#setSave").disabled = false; }
+    });
+    $("#setReset").addEventListener("click", async () => {
+      if (!confirm("Reset all settings to factory defaults?")) return;
+      try { await api("/api/settings/reset", { method: "POST" }); toast("Reset to defaults"); Settings(); }
+      catch (e) { toast(e.message); }
+    });
+  };
+
   // ---------- Guide ----------
   const Guide = () => {
     view.innerHTML = `
@@ -316,7 +464,7 @@
   };
 
   // ---------- render ----------
-  const views = { recommend: Recommend, scan: Scan, train: Train, brokers: Brokers, guide: Guide };
+  const views = { recommend: Recommend, scan: Scan, train: Train, brokers: Brokers, settings: Settings, guide: Guide };
   async function render() {
     setActive();
     view.scrollTo && window.scrollTo(0, 0);

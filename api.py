@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from screener.bootstrap import bootstrap, get_service
 from screener.core.config import config
+from screener.core.interfaces import MarketDataProvider
 from screener.services import (
     AnalysisService,
     BrokerService,
@@ -52,6 +53,11 @@ class UrlBody(BaseModel):
 class BrokerBody(BaseModel):
     broker: str
     credentials: dict
+
+
+class SettingsBody(BaseModel):
+    # Partial patch, e.g. {"scoring": {"buy_threshold": 40}, "risk": {...}}
+    patch: dict
 
 
 # --------------------------------------------------------------------------- #
@@ -110,6 +116,16 @@ def list_filters():
     }
 
 
+@app.get("/api/search")
+def search(q: str = ""):
+    """Search for a stock by symbol or company name (NSE & BSE)."""
+    data = get_service(MarketDataProvider)
+    searcher = getattr(data, "search", None)
+    if not callable(searcher):
+        return {"query": q, "results": []}
+    return {"query": q, "results": searcher(q)}
+
+
 @app.get("/api/verify")
 def verify():
     verification = get_service(VerificationService)
@@ -122,6 +138,36 @@ def verify():
         return verification.get_current_price(sym)
 
     return verification.verify(price_of).model_dump()
+
+
+# --------------------------------------------------------------------------- #
+# Settings / Dashboard APIs
+# --------------------------------------------------------------------------- #
+@app.get("/api/settings")
+def get_settings():
+    """Current value of every dashboard-editable setting."""
+    return config.editable_snapshot()
+
+
+@app.get("/api/settings/defaults")
+def get_settings_defaults():
+    """Factory defaults (for the UI 'reset to default' reference)."""
+    return config._defaults()
+
+
+@app.post("/api/settings")
+def update_settings(body: SettingsBody):
+    """Apply a partial settings patch and persist it."""
+    try:
+        return config.update_settings(body.patch)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.post("/api/settings/reset")
+def reset_settings():
+    """Restore factory defaults and clear persisted overrides."""
+    return config.reset_settings()
 
 
 # --------------------------------------------------------------------------- #

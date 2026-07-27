@@ -1,4 +1,4 @@
-const CACHE = "screener-v2";
+const CACHE = "screener-v4";
 const SHELL = ["/", "/static/app.js", "/static/styles.css", "/static/icon.svg", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
@@ -10,7 +10,15 @@ self.addEventListener("activate", (e) => {
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
+      // Tell every open page a new version is live so it reloads with fresh code.
+      .then(() => self.clients.matchAll({ type: "window" }))
+      .then((wins) => wins.forEach((w) => w.postMessage({ type: "SW_UPDATED" })))
   );
+});
+
+// Allow a page to ask the waiting worker to take over immediately.
+self.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 // Network-first everywhere: fresh code & data, falling back to cache when offline.
