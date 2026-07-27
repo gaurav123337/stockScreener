@@ -168,10 +168,7 @@ def cmd_verify(_args):
         live = broker.get_ltp(symbol)
         if live:
             return live
-        from screener.infrastructure.data.yahoo_provider import YahooDataProvider
-        provider = YahooDataProvider()
-        df = provider.fetch_history(symbol, period="5d")
-        return float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
+        return verification.get_current_price(symbol)
 
     console.print("[bold]Verifying due predictions against current prices...[/bold]")
     res = verification.verify(price_of)

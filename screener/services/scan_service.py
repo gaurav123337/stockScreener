@@ -11,7 +11,6 @@ from screener.core.config import config
 from screener.core.models import Recommendation, ScanResult
 from screener.services.analysis_service import AnalysisService
 from screener.services.verification_service import VerificationService
-from screener.universe import NIFTY50
 
 
 class ScanService:
@@ -33,7 +32,7 @@ class ScanService:
         max_workers: int | None = None,
     ) -> ScanResult:
         """Scan symbols and return matched recommendations."""
-        symbols = symbols or NIFTY50
+        symbols = symbols or config.default_universe
         workers = max_workers or config.data.max_workers
 
         with ThreadPoolExecutor(max_workers=workers) as ex:

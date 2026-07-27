@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 from screener.core.config import config
 from screener.core.container import container
-from screener.core.interfaces import PredictionRepository
+from screener.core.interfaces import MarketDataProvider, PredictionRepository
 from screener.core.models import (
     Action,
     Outcome,
@@ -18,8 +18,13 @@ from screener.core.models import (
 class VerificationService:
     """Logs and verifies predictions."""
 
-    def __init__(self, repository: PredictionRepository | None = None):
+    def __init__(
+        self,
+        repository: PredictionRepository | None = None,
+        data_provider: MarketDataProvider | None = None,
+    ):
         self._repo = repository or container.resolve(PredictionRepository)
+        self._data = data_provider or container.resolve(MarketDataProvider)
 
     def log_prediction(self, rec: Recommendation) -> None:
         """Persist a BUY/SELL prediction for later verification."""
@@ -36,11 +41,24 @@ class VerificationService:
         )
         self._repo.save(record)
 
-    def verify(self, price_fetcher: callable) -> VerificationReport:
-        """Score all due predictions against current prices."""
+    def get_current_price(self, symbol: str) -> float | None:
+        """Fetch current price for a symbol via the data provider."""
+        df = self._data.fetch_history(symbol, period="5d")
+        if df is not None and not df.empty:
+            return float(df["Close"].iloc[-1])
+        return None
+
+    def verify(self, price_fetcher: callable | None = None) -> VerificationReport:
+        """Score all due predictions against current prices.
+
+        Args:
+            price_fetcher: Optional callable that takes a symbol and returns a price.
+                           If None, uses the built-in data provider.
+        """
+        fetcher = price_fetcher or self.get_current_price
         due = self._repo.get_due()
         for record in due:
-            price = price_fetcher(record.symbol)
+            price = fetcher(record.symbol)
             if price is None:
                 continue
             outcome, ret = self._compute_outcome(

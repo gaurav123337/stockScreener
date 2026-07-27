@@ -119,11 +119,7 @@ def verify():
         live = broker.get_ltp(sym)
         if live:
             return live
-        # Fallback to Yahoo
-        from screener.infrastructure.data.yahoo_provider import YahooDataProvider
-        provider = YahooDataProvider()
-        df = provider.fetch_history(sym, period="5d")
-        return float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
+        return verification.get_current_price(sym)
 
     return verification.verify(price_of).model_dump()
 

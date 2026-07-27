@@ -89,6 +89,20 @@ class AppConfig(BaseSettings):
     environment: Literal["development", "production", "testing"] = "development"
     debug: bool = False
 
+    # Default symbol universe
+    default_universe: list[str] = Field(default_factory=lambda: [
+        "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK",
+        "BAJAJ-AUTO", "BAJAJFINSV", "BAJFINANCE", "BEL", "BHARTIARTL",
+        "BPCL", "BRITANNIA", "CIPLA", "COALINDIA", "DRREDDY",
+        "EICHERMOT", "GRASIM", "HCLTECH", "HDFCBANK", "HDFCLIFE",
+        "HEROMOTOCO", "HINDALCO", "HINDUNILVR", "ICICIBANK", "INDUSINDBK",
+        "INFY", "ITC", "JSWSTEEL", "KOTAKBANK", "LT",
+        "M&M", "MARUTI", "NESTLEIND", "NTPC", "ONGC",
+        "POWERGRID", "RELIANCE", "SBILIFE", "SBIN", "SHRIRAMFIN",
+        "SUNPHARMA", "TATACONSUM", "TATAMOTORS", "TATASTEEL", "TCS",
+        "TECHM", "TITAN", "TRENT", "ULTRACEMCO", "WIPRO",
+    ])
+
     @field_validator("data_dir", mode="before")
     @classmethod
     def _default_data_dir(cls, v, info):

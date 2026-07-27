@@ -9,9 +9,9 @@ import pandas as pd
 
 from screener.core.config import config
 from screener.core.container import container
+from screener.core.indicators import add_all
 from screener.core.interfaces import MarketDataProvider
 from screener.core.models import Action, Recommendation, StockMetrics
-from screener.indicators import add_all
 from screener.services.scoring_engine import ScoringEngine
 
 
