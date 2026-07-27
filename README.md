@@ -81,7 +81,15 @@ screener/
     scoring_engine.py           # Pluggable scoring strategies
   indicators.py                 # Technical indicators (unchanged)
   universe.py                   # Nifty 50 symbol list (unchanged)
-web/                            # The SPA (PWA)
+frontend/                       # React 18 + Vite + TypeScript SPA (PWA)
+  src/
+    api/                        # Typed API client + endpoint wrappers
+    app/                        # Shell: layout, router, toast, query client
+    features/                   # One module per tab (recommend, scan, train, ...)
+    components/                 # Shared UI (Section, RecommendationCard)
+    types/api.ts                # Types mirroring the FastAPI JSON payloads
+  dist/                         # Production build (served by api.py)
+web/                            # Legacy vanilla SPA — fallback if no build exists
   index.html
   manifest.json
   sw.js
@@ -109,12 +117,32 @@ pip install -r requirements.txt
 python api.py            # serves on http://localhost:8000
 ```
 
-Open **http://localhost:8000** in a browser. It's a single-page app with 5 tabs:
+Open **http://localhost:8000** in a browser. It's a single-page app with 6 tabs:
 - **Recommend** — type symbols → BUY/SELL/HOLD card with entry, target, stop-loss, R:R and reasons.
 - **Scan** — screen Nifty 50 (or your list) with a pre-defined filter chip or a custom expression, ranked by score.
 - **Train** — upload PDFs / notes / video transcripts, or paste a blog/article URL; it extracts market rules into the knowledge base. View the knowledge base here too.
 - **Brokers** — connect **Zerodha Kite** or **Angel One SmartAPI** (step-by-step instructions in-app) for live LTP and your holdings/positions. Optional — the app works fine on free data.
 - **Guide** — how to use everything.
+
+### ⚛️ Frontend development (React + Vite + TypeScript)
+
+The SPA lives in `frontend/` and is a React 18 + Vite + TypeScript app
+(TanStack Query, React Router, React Hook Form, CSS Modules, `vite-plugin-pwa`).
+`api.py` serves the production build from `frontend/dist/` when present and
+falls back to the legacy vanilla SPA in `web/` otherwise.
+
+```bash
+cd frontend
+npm install          # one-time
+npm run dev          # dev server on :5173, proxies /api → :8000 (run api.py too)
+npm run build        # type-check + production build → frontend/dist
+npm run lint         # ESLint (zero warnings allowed)
+npm run typecheck    # tsc --noEmit
+```
+
+Workflow: run `python api.py` in one terminal and `npm run dev` in another for
+hot-reload development; `npm run build` before deploying so `api.py` serves the
+fresh bundle.
 
 ### 📲 Install on your phone (PWA)
 It's a Progressive Web App (manifest + service worker), so it installs like a native app:

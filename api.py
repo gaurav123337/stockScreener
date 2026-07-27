@@ -29,7 +29,10 @@ from screener.services import (
 bootstrap()
 
 ROOT = Path(__file__).resolve().parent
-WEB = ROOT / "web"
+LEGACY_WEB = ROOT / "web"
+DIST = ROOT / "frontend" / "dist"
+# Prefer the React build when present; fall back to the legacy vanilla SPA.
+WEB = DIST if (DIST / "index.html").exists() else LEGACY_WEB
 
 app = FastAPI(title="stockScreener", version="0.3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
@@ -242,7 +245,11 @@ def broker_holdings():
 # --------------------------------------------------------------------------- #
 @app.get("/manifest.json")
 def manifest():
-    return FileResponse(WEB / "manifest.json")
+    # Vite PWA emits manifest.webmanifest; the legacy SPA used manifest.json.
+    candidate = WEB / "manifest.webmanifest"
+    if not candidate.exists():
+        candidate = WEB / "manifest.json"
+    return FileResponse(candidate)
 
 
 @app.get("/sw.js")
@@ -259,8 +266,10 @@ def spa(full_path: str):
     return FileResponse(WEB / "index.html")
 
 
-if WEB.exists():
-    app.mount("/static", StaticFiles(directory=WEB / "static"), name="static")
+# Legacy vanilla SPA keeps its assets under web/static; the Vite build emits
+# hashed assets under dist/assets (served by the catch-all above).
+if LEGACY_WEB.exists() and not (DIST / "index.html").exists():
+    app.mount("/static", StaticFiles(directory=LEGACY_WEB / "static"), name="static")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,44 @@
+.setrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.setrow:last-child {
+  border-bottom: 0;
+}
+
+.setlab {
+  font-size: 13px;
+  flex: 1;
+}
+
+.setdef {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.setnum {
+  flex: 0 0 110px;
+  width: 110px;
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 14px;
+  outline: none;
+  text-align: right;
+}
+
+.setnum:focus {
+  border-color: var(--accent2);
+}
+
+.setnum[type="text"] {
+  text-align: left;
+}
