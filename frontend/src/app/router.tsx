@@ -16,8 +16,28 @@ const GuidePage = lazy(() => import("@/features/guide/GuidePage"));
 const FeedbackPage = lazy(() => import("@/features/feedback/FeedbackPage"));
 const LoginPage = lazy(() => import("@/features/auth/LoginPage"));
 const RegisterPage = lazy(() => import("@/features/auth/RegisterPage"));
+const ForgotPasswordPage = lazy(() => import("@/features/auth/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("@/features/auth/ResetPasswordPage"));
+const VerifyEmailPage = lazy(() => import("@/features/auth/VerifyEmailPage"));
+const ControlCenterLayout = lazy(() => import("@/features/control-center/ControlCenterLayout"));
+const OverviewPage = lazy(() => import("@/features/control-center/OverviewPage"));
+const UsersPage = lazy(() => import("@/features/control-center/UsersPage"));
+const FeedbackOpsPage = lazy(() => import("@/features/control-center/FeedbackOpsPage"));
+const ConfigPage = lazy(() => import("@/features/control-center/ConfigPage"));
+const AuditPage = lazy(() => import("@/features/control-center/AuditPage"));
 
 export const router = createHashRouter([
+  {
+    path: "control-center",
+    element: <ControlCenterLayout />,
+    children: [
+      { index: true, element: <OverviewPage /> },
+      { path: "users", element: <UsersPage /> },
+      { path: "feedback", element: <FeedbackOpsPage /> },
+      { path: "config", element: <ConfigPage /> },
+      { path: "audit", element: <AuditPage /> },
+    ],
+  },
   {
     element: <AppLayout />,
     children: [
@@ -31,6 +51,9 @@ export const router = createHashRouter([
       { path: "feedback", element: <FeedbackPage /> },
       { path: "auth/login", element: <LoginPage /> },
       { path: "auth/register", element: <RegisterPage /> },
+      { path: "auth/forgot-password", element: <ForgotPasswordPage /> },
+      { path: "auth/reset-password", element: <ResetPasswordPage /> },
+      { path: "auth/verify-email", element: <VerifyEmailPage /> },
       { path: "*", element: <Navigate to="/recommend" replace /> },
     ],
   },

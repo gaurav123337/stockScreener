@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { api } from "@/api/endpoints";
 import { clearAuth, getStoredUser, getToken, setStoredUser, setToken } from "@/api/client";
-import { AuthContext, type AuthContextValue } from "./auth-context";
-import type { UserProfile } from "@/types/api";
+import { api } from "@/api/endpoints";
 import { queryClient } from "@/app/queryClient";
+import type { UserProfile } from "@/types/api";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { AuthContext, type AuthContextValue } from "./auth-context";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(() => {
@@ -12,8 +12,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {
         user_id: stored.user_id,
         username: stored.username,
+        email: null,
         display_name: stored.display_name,
+        role: stored.role ?? "user",
+        status: stored.status ?? "active",
+        email_verified_at: null,
         created_at: "",
+        last_login_at: null,
         preferences: {},
       };
     }
@@ -23,32 +28,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isLoggedIn = user !== null && user.username !== "guest";
   const isGuest = !isLoggedIn;
 
-  const login = useCallback(async (username: string, password: string) => {
-    const result = await api.login({ username, password });
+  const login = useCallback(async (email: string, password: string) => {
+    const result = await api.login({ email, password });
     queryClient.clear();
     setToken(result.token);
-    const profile: UserProfile = {
-      user_id: result.user.user_id,
-      username: result.user.username,
-      display_name: result.user.display_name,
-      created_at: result.user.created_at,
-      preferences: result.user.preferences,
-    };
+    const profile = result.user;
     setStoredUser(profile);
     setUser(profile);
+    return profile;
   }, []);
 
-  const register = useCallback(async (username: string, password: string, displayName?: string) => {
-    const result = await api.register({ username, password, display_name: displayName });
+  const register = useCallback(async (email: string, password: string, confirmation: string, displayName?: string) => {
+    const result = await api.register({ email, password, password_confirmation: confirmation, display_name: displayName });
     queryClient.clear();
     setToken(result.token);
-    const profile: UserProfile = {
-      user_id: result.user.user_id,
-      username: result.user.username,
-      display_name: result.user.display_name,
-      created_at: result.user.created_at,
-      preferences: result.user.preferences,
-    };
+    const profile = result.user;
     setStoredUser(profile);
     setUser(profile);
   }, []);

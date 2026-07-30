@@ -11,7 +11,7 @@ export default function RegisterPage() {
   const { register } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -22,16 +22,12 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
 
-    if (!username.trim() || !password) {
+    if (!email.trim() || !password) {
       setError("Please fill in all required fields");
       return;
     }
-    if (username.trim().length < 2) {
-      setError("Username must be at least 2 characters");
-      return;
-    }
-    if (password.length < 4) {
-      setError("Password must be at least 4 characters");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
       return;
     }
     if (password !== confirm) {
@@ -41,8 +37,8 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await register(username.trim(), password, displayName.trim() || undefined);
-      toast("Account created successfully!");
+      await register(email.trim(), password, confirm, displayName.trim() || undefined);
+      toast("Account created. Check your email to verify it.");
       navigate("/recommend", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -71,16 +67,16 @@ export default function RegisterPage() {
         )}
 
         <form onSubmit={handleSubmit} className="mt-5 grid gap-4">
-          <label className={labelClass} htmlFor="register-username">
-            Username *
+          <label className={labelClass} htmlFor="register-email">
+            Email *
             <input
-              id="register-username"
+              id="register-email"
               className={controlClass}
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Choose a username"
-              autoComplete="username"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
               disabled={loading}
             />
           </label>

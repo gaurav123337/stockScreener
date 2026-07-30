@@ -1,6 +1,15 @@
 import { http } from "./client";
 import type {
   AuthToken,
+  AdminFeedback,
+  AdminFeedbackDetail,
+  AdminOverview,
+  AdminUser,
+  AuditEvent,
+  ConfigPublication,
+  ConfigDiff,
+  ConfigRegistryItem,
+  Paginated,
   BrokerConnectRequest,
   BrokerInstructionsResponse,
   BrokerStatusResponse,
@@ -24,12 +33,43 @@ import type {
 /** Typed wrappers around every backend endpoint (see api.py). */
 export const api = {
   /* Auth */
-  register: (body: { username: string; password: string; display_name?: string }) =>
+  register: (body: { email: string; password: string; password_confirmation: string; display_name?: string }) =>
     http.post<AuthToken>("/api/auth/register", body),
-  login: (body: { username: string; password: string }) =>
+  login: (body: { email: string; password: string }) =>
     http.post<AuthToken>("/api/auth/login", body),
   logout: () => http.post<{ message: string }>("/api/auth/logout"),
+  logoutAll: () => http.post<{ message: string }>("/api/auth/logout-all"),
+  verifyEmail: (token: string) => http.post<UserProfile>("/api/auth/verify-email", { token }),
+  resendVerification: () => http.post<{ message: string }>("/api/auth/resend-verification"),
+  forgotPassword: (email: string) => http.post<{ message: string }>("/api/auth/forgot-password", { email }),
+  resetPassword: (token: string, password: string, passwordConfirmation: string) =>
+    http.post<{ message: string }>("/api/auth/reset-password", { token, password, password_confirmation: passwordConfirmation }),
   me: () => http.get<UserProfile>("/api/auth/me"),
+
+  /* Product owner control center */
+  adminOverview: () => http.get<AdminOverview>("/api/admin/overview"),
+  adminUsers: (query = "") => http.get<Paginated<AdminUser>>(`/api/admin/users${query ? `?${query}` : ""}`),
+  adminUser: (userId: string) => http.get<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}`),
+  setAdminUserStatus: (userId: string, status: string, reason: string) =>
+    http.post<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/status`, { status, reason }),
+  sendAdminPasswordReset: (userId: string, reason: string) =>
+    http.post<{ message: string }>(`/api/admin/users/${encodeURIComponent(userId)}/password-reset`, { reason }),
+  adminFeedback: (query = "") => http.get<Paginated<AdminFeedback>>(`/api/admin/feedback${query ? `?${query}` : ""}`),
+  adminFeedbackDetail: (feedbackId: string) =>
+    http.get<AdminFeedbackDetail>(`/api/admin/feedback/${encodeURIComponent(feedbackId)}`),
+  updateAdminFeedback: (feedbackId: string, body: Record<string, unknown>) =>
+    http.post<AdminFeedback>(`/api/admin/feedback/${encodeURIComponent(feedbackId)}`, body),
+  configRegistry: () => http.get<{ items: ConfigRegistryItem[] }>("/api/admin/config/registry"),
+  currentGlobalConfig: () => http.get<ConfigPublication>("/api/admin/config/current"),
+  validateGlobalConfig: (patch: SettingsPatch) =>
+    http.post<{ valid: boolean; values: Settings }>("/api/admin/config/validate", { patch }),
+  diffGlobalConfig: (patch: SettingsPatch) => http.post<ConfigDiff>("/api/admin/config/diff", { patch }),
+  globalConfigHistory: () => http.get<{ items: ConfigPublication[] }>("/api/admin/config/history"),
+  publishGlobalConfig: (patch: SettingsPatch, policies: Record<string, string>, reason: string, expectedVersion: number) =>
+    http.post<ConfigPublication>("/api/admin/config/publish", { patch, policies, reason, expected_version: expectedVersion }),
+  rollbackGlobalConfig: (version: number, reason: string) =>
+    http.post<ConfigPublication>("/api/admin/config/rollback", { version, reason }),
+  adminAudit: () => http.get<{ items: AuditEvent[] }>("/api/admin/audit"),
 
   /* Tester feedback */
   submitFeedback: (body: FeedbackRequest) => http.post<FeedbackReceipt>("/api/feedback", body),

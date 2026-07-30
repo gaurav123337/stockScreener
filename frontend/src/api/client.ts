@@ -62,6 +62,8 @@ export function getStoredUser(): {
   user_id: string;
   username: string;
   display_name: string | null;
+  role?: "user" | "product_owner";
+  status?: "active" | "suspended";
 } | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
@@ -73,7 +75,7 @@ export function getStoredUser(): {
 }
 
 export function setStoredUser(
-  user: { user_id: string; username: string; display_name: string | null } | null,
+  user: { user_id: string; username: string; display_name: string | null; role?: string; status?: string } | null,
 ): void {
   try {
     if (user) {

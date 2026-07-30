@@ -5,6 +5,7 @@ import { useAuth } from "@/features/auth/auth-context";
 import { cn } from "@/lib/cn";
 import {
   BrainCircuit,
+  Command,
   CircleHelp,
   Download,
   LogIn,
@@ -158,6 +159,16 @@ export function AppLayout() {
                 <UserRound className="size-4 shrink-0" aria-hidden />
                 <span className="truncate">{user.display_name || user.username}</span>
               </span>
+            )}
+            {user?.role === "product_owner" && (
+              <NavLink
+                to="/control-center"
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-border text-ink hover:bg-surface-raised"
+                aria-label="Open product owner control center"
+                title="Control center"
+              >
+                <Command className="size-4" aria-hidden />
+              </NavLink>
             )}
             {canInstall && (
               <button

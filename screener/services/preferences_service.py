@@ -10,15 +10,17 @@ import copy
 from typing import Any
 
 from screener.core.config import AppConfig, config
-from screener.core.responses import ErrorCodes, ValidationError
+from screener.core.responses import ValidationError
 from screener.core.user_models import UserStore, user_store
+from screener.services.control_center_service import ControlCenterStore
 
 
 class PreferencesService:
     """Manages per-user preferences, overlaying them on the global config."""
 
-    def __init__(self, store: UserStore | None = None):
+    def __init__(self, store: UserStore | None = None, policy_store: ControlCenterStore | None = None):
         self._store = store or user_store
+        self._policy_store = policy_store or ControlCenterStore()
 
     # ------------------------------------------------------------------ #
     # Get preferences
@@ -34,7 +36,7 @@ class PreferencesService:
         Returns a dict in the same shape as `config.editable_snapshot()`.
         """
         defaults = config.editable_snapshot()
-        user_prefs = self.get_preferences(user_id)
+        user_prefs = self._allowed_preferences(self.get_preferences(user_id))
         return self._deep_merge(defaults, user_prefs)
 
     def get_effective_config(self, user_id: str) -> AppConfig:
@@ -42,7 +44,7 @@ class PreferencesService:
 
         This creates a temporary config clone — does NOT modify the global.
         """
-        user_prefs = self.get_preferences(user_id)
+        user_prefs = self._allowed_preferences(self.get_preferences(user_id))
         if not user_prefs:
             return config
 
@@ -76,6 +78,7 @@ class PreferencesService:
             raise ValidationError("Empty preferences payload")
 
         allowed = config.editable_snapshot()
+        locked = self._locked_paths()
         unknown = [k for k in patch if k not in allowed]
         if unknown:
             raise ValidationError(
@@ -100,6 +103,13 @@ class PreferencesService:
                             "allowed_keys": sorted(allowed[section]),
                         },
                     )
+                locked_fields = [key for key in value if f"{section}.{key}" in locked]
+                if locked_fields:
+                    raise ValidationError(
+                        f"Globally locked field(s) in '{section}': {', '.join(sorted(locked_fields))}"
+                    )
+            elif section in locked:
+                raise ValidationError(f"Preference '{section}' is globally locked")
 
         if "default_universe" in patch:
             universe = patch["default_universe"]
@@ -165,6 +175,24 @@ class PreferencesService:
             else:
                 result[key] = copy.deepcopy(value)
         return result
+
+    def _locked_paths(self) -> set[str]:
+        current = self._policy_store.current_config()
+        if not current:
+            return set()
+        return {key for key, policy in current["policies"].items() if policy == "locked"}
+
+    def _allowed_preferences(self, preferences: dict[str, Any]) -> dict[str, Any]:
+        filtered = copy.deepcopy(preferences)
+        for path in self._locked_paths():
+            section, separator, field = path.partition(".")
+            if separator and isinstance(filtered.get(section), dict):
+                filtered[section].pop(field, None)
+                if not filtered[section]:
+                    filtered.pop(section, None)
+            else:
+                filtered.pop(section, None)
+        return filtered
 
     @staticmethod
     def _normalize_symbols(symbols: list[Any]) -> list[str]:
