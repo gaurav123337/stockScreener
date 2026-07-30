@@ -13,7 +13,7 @@ from screener.core.interfaces import (
     PredictionRepository,
 )
 from screener.infrastructure.data.yahoo_provider import YahooDataProvider
-from screener.infrastructure.notifications import SMTPFeedbackNotifier
+from screener.infrastructure.notifications import ResendFeedbackNotifier
 from screener.infrastructure.persistence.csv_repository import (
     CSVPredictionRepository,
     MarkdownKnowledgeStore,
@@ -46,7 +46,7 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(MarketDataProvider, YahooDataProvider)
     container.register(PredictionRepository, CSVPredictionRepository)
     container.register(KnowledgeStore, MarkdownKnowledgeStore)
-    container.register(FeedbackNotifier, factory=SMTPFeedbackNotifier.from_environment)
+    container.register(FeedbackNotifier, factory=ResendFeedbackNotifier.from_environment)
 
     # Services
     container.register(AnalysisService, AnalysisService)

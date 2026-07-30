@@ -11,13 +11,7 @@ services:
         value: production
       - key: SCREENER_FEEDBACK_EMAIL_TO
         value: garudagaura@gmail.com
-      - key: SCREENER_SMTP_HOST
-        value: smtp.gmail.com
-      - key: SCREENER_SMTP_PORT
-        value: 587
-      - key: SCREENER_SMTP_USE_TLS
-        value: true
-      - key: SCREENER_SMTP_USERNAME
+      - key: SCREENER_FEEDBACK_EMAIL_FROM
         sync: false
-      - key: SCREENER_SMTP_PASSWORD
+      - key: RESEND_API_KEY
         sync: false
