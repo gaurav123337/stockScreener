@@ -75,3 +75,12 @@ The end-to-end feedback path is complete in the working tree and coordinated wit
 - Wired notification delivery through `FeedbackService` after persistence and passed the authenticated reporter email from `POST /api/feedback`.
 - Added Gmail SMTP defaults to the Render Blueprint while keeping the username and App Password secret.
 - Added tests for recipient/message delivery, reporter reply address, invalid port fallback, and persistence during SMTP failure.
+
+## Render Free Email Transport Fix – 2026-07-30
+
+**Timestamp:** **2026-07-30T16:31:00Z (UTC) | 30-07-2026 22:01:00 (IST)**
+
+- Replaced the deployed Gmail SMTP transport with Resend's HTTPS API because Render Free blocks outbound SMTP ports 25, 465, and 587.
+- Added explicit missing-configuration and rejected-provider diagnostics while preserving feedback before notification delivery.
+- Updated the Render Blueprint to request `RESEND_API_KEY` and a verified `SCREENER_FEEDBACK_EMAIL_FROM` sender.
+- Retained the SMTP adapter for non-Render deployments, but the application bootstrap now selects Resend.

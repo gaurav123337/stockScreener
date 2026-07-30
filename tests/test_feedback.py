@@ -6,9 +6,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from screener.core.feedback_models import FeedbackSubmission
 from screener.core.responses import ValidationError
-from screener.infrastructure.notifications import SMTPFeedbackNotifier
+from screener.infrastructure.notifications import (
+    ResendFeedbackNotifier,
+    SMTPFeedbackNotifier,
+)
 from screener.infrastructure.persistence.feedback_store import FeedbackStore
 from screener.services.feedback_service import FeedbackService
 
@@ -187,6 +192,57 @@ class SMTPFeedbackNotifierTests(unittest.TestCase):
         notifier = SMTPFeedbackNotifier.from_environment()
 
         self.assertEqual(notifier._port, 587)
+
+
+class ResendFeedbackNotifierTests(unittest.TestCase):
+    @staticmethod
+    def record():
+        with tempfile.TemporaryDirectory() as temp_dir:
+            return FeedbackService(
+                FeedbackStore(Path(temp_dir) / "feedback.db")
+            ).submit(
+                FeedbackServiceTests.submission(),
+                user_id="tenant-a",
+                username="tester-a",
+            )
+
+    @patch("screener.infrastructure.notifications.resend_feedback_notifier.requests.post")
+    def test_sends_feedback_over_https(self, post):
+        post.return_value.raise_for_status.return_value = None
+        record = self.record()
+        notifier = ResendFeedbackNotifier(
+            api_key="re_test",
+            sender="Stock Screener <feedback@example.com>",
+        )
+
+        notifier.notify(record, "tester@example.com")
+
+        request = post.call_args
+        self.assertEqual(request.args[0], "https://api.resend.com/emails")
+        self.assertEqual(request.kwargs["headers"]["Authorization"], "Bearer re_test")
+        self.assertEqual(request.kwargs["json"]["to"], ["garudagaura@gmail.com"])
+        self.assertEqual(request.kwargs["json"]["reply_to"], "tester@example.com")
+        self.assertIn(record.feedback_id, request.kwargs["json"]["text"])
+
+    def test_missing_configuration_is_reported(self):
+        notifier = ResendFeedbackNotifier()
+
+        with self.assertRaisesRegex(RuntimeError, "RESEND_API_KEY"):
+            notifier.notify(self.record(), None)
+
+    @patch("screener.infrastructure.notifications.resend_feedback_notifier.requests.post")
+    def test_rejected_request_includes_provider_response(self, post):
+        response = post.return_value
+        response.status_code = 403
+        response.text = '{"message":"Sender domain is not verified"}'
+        response.raise_for_status.side_effect = requests.HTTPError("forbidden")
+        notifier = ResendFeedbackNotifier(
+            api_key="re_test",
+            sender="Stock Screener <feedback@example.com>",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "Sender domain is not verified"):
+            notifier.notify(self.record(), None)
 
 
 if __name__ == "__main__":

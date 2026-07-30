@@ -28,12 +28,12 @@ Treat this deployment as a disposable preview. Tell testers not to enter real br
 6. Wait for the Docker build and health check to complete.
 7. Open the assigned `https://stockscreener-preview-....onrender.com` URL.
 
-No secrets are required for market-data access. To email new feedback to `garudagaura@gmail.com`, the Blueprint prompts for these secret environment variables:
+No secrets are required for market-data access. Feedback email uses the Resend HTTPS API because Render Free blocks outbound SMTP ports 25, 465, and 587. The Blueprint prompts for:
 
-- `SCREENER_SMTP_USERNAME`: the Gmail address used to send notifications.
-- `SCREENER_SMTP_PASSWORD`: a Google App Password for that account, not its normal sign-in password.
+- `RESEND_API_KEY`: an API key created in the Resend dashboard.
+- `SCREENER_FEEDBACK_EMAIL_FROM`: a verified Resend sender, such as `Stock Screener <feedback@your-domain.example>`.
 
-Enable 2-Step Verification on the sending Google account, create an App Password, and enter it in Render. The non-secret SMTP host, port, TLS setting, and feedback recipient are defined in `render.yaml`. If SMTP is not configured or delivery fails, feedback is still persisted and available in the Product Owner control center.
+Verify the sender domain in Resend before deploying, then enter both values in Render. The recipient remains `garudagaura@gmail.com` in `render.yaml`. If email configuration is missing or delivery fails, feedback is still persisted and available in the Product Owner control center; inspect Render logs for `email notification failed` and the Resend error response.
 
 Render injects `PORT`; the container start command uses it automatically.
 
