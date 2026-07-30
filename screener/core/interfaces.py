@@ -19,6 +19,7 @@ from screener.core.models import (
     ScanResult,
     VerificationReport,
 )
+from screener.core.feedback_models import FeedbackRecord
 
 
 class MarketDataProvider(ABC):
@@ -144,3 +145,10 @@ class EventBus(ABC):
 
     @abstractmethod
     def subscribe(self, event: str, handler: Callable[[dict], None]) -> None: ...
+
+
+class FeedbackNotifier(ABC):
+    """Deliver a newly persisted feedback record to an operational channel."""
+
+    @abstractmethod
+    def notify(self, feedback: FeedbackRecord, reporter_email: str | None) -> None: ...

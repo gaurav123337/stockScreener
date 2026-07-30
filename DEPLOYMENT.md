@@ -28,7 +28,14 @@ Treat this deployment as a disposable preview. Tell testers not to enter real br
 6. Wait for the Docker build and health check to complete.
 7. Open the assigned `https://stockscreener-preview-....onrender.com` URL.
 
-No environment secrets are required for the basic Yahoo Finance-backed preview. Render injects `PORT`; the container start command uses it automatically.
+No secrets are required for market-data access. To email new feedback to `garudagaura@gmail.com`, the Blueprint prompts for these secret environment variables:
+
+- `SCREENER_SMTP_USERNAME`: the Gmail address used to send notifications.
+- `SCREENER_SMTP_PASSWORD`: a Google App Password for that account, not its normal sign-in password.
+
+Enable 2-Step Verification on the sending Google account, create an App Password, and enter it in Render. The non-secret SMTP host, port, TLS setting, and feedback recipient are defined in `render.yaml`. If SMTP is not configured or delivery fails, feedback is still persisted and available in the Product Owner control center.
+
+Render injects `PORT`; the container start command uses it automatically.
 
 ## Validate The Deployment
 

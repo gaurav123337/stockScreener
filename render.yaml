@@ -9,3 +9,15 @@ services:
     envVars:
       - key: SCREENER_ENVIRONMENT
         value: production
+      - key: SCREENER_FEEDBACK_EMAIL_TO
+        value: garudagaura@gmail.com
+      - key: SCREENER_SMTP_HOST
+        value: smtp.gmail.com
+      - key: SCREENER_SMTP_PORT
+        value: 587
+      - key: SCREENER_SMTP_USE_TLS
+        value: true
+      - key: SCREENER_SMTP_USERNAME
+        sync: false
+      - key: SCREENER_SMTP_PASSWORD
+        sync: false

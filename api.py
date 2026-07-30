@@ -503,6 +503,7 @@ def submit_feedback(
         FeedbackSubmission.model_validate(body.model_dump()),
         user_id=user.user_id,
         username=user.username,
+        reporter_email=user.email,
     )
     return {
         "feedback_id": record.feedback_id,

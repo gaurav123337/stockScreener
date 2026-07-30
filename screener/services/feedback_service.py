@@ -2,12 +2,17 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from screener.core.feedback_models import FeedbackRecord, FeedbackSubmission
+from screener.core.interfaces import FeedbackNotifier
 from screener.core.responses import ValidationError
 from screener.infrastructure.persistence.feedback_store import FeedbackStore
+
+
+logger = logging.getLogger(__name__)
 
 
 class FeedbackService:
@@ -20,8 +25,13 @@ class FeedbackService:
         "orderedList", "paragraph",
     }
 
-    def __init__(self, store: FeedbackStore | None = None):
+    def __init__(
+        self,
+        store: FeedbackStore | None = None,
+        notifier: FeedbackNotifier | None = None,
+    ):
         self._store = store or FeedbackStore()
+        self._notifier = notifier
 
     def submit(
         self,
@@ -29,6 +39,7 @@ class FeedbackService:
         *,
         user_id: str,
         username: str,
+        reporter_email: str | None = None,
     ) -> FeedbackRecord:
         title = submission.title.strip()
         document = submission.document
@@ -59,7 +70,16 @@ class FeedbackService:
             plain_text=plain_text,
             created_at=datetime.now(timezone.utc),
         )
-        return self._store.create(record)
+        persisted = self._store.create(record)
+        if self._notifier:
+            try:
+                self._notifier.notify(persisted, reporter_email)
+            except Exception:
+                logger.exception(
+                    "Feedback %s was saved but its email notification failed",
+                    persisted.feedback_id,
+                )
+        return persisted
 
     @classmethod
     def _extract_plain_text(cls, node: object) -> str:
