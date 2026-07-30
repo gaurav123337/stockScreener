@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from screener.core.config import config
+from screener.core.config import AppConfig, config
 from screener.core.container import container
 from screener.core.indicators import add_all
 from screener.core.interfaces import MarketDataProvider
@@ -26,12 +26,13 @@ class AnalysisService:
         self._data = data_provider or container.resolve(MarketDataProvider)
         self._scorer = scoring_engine or ScoringEngine()
 
-    def analyze(self, symbol: str) -> Recommendation:
+    def analyze(self, symbol: str, app_config: AppConfig | None = None) -> Recommendation:
         """Produce a full recommendation for a symbol.
 
         Resolves the symbol first so that names without an exchange suffix
         work on both NSE and BSE, and the returned symbol is the real ticker.
         """
+        effective_config = app_config or config
         resolved = symbol
         resolver = getattr(self._data, "resolve_symbol", None)
         if callable(resolver):
@@ -64,19 +65,27 @@ class AnalysisService:
         price = float(last["Close"])
 
         # Score via pluggable engine
-        score, reasons = self._scorer.total_score(last, prev, info)
+        scorer = self._scorer
+        if app_config is not None:
+            scorer = ScoringEngine(
+                use_registry=False,
+                scoring_config=effective_config.scoring,
+            )
+        score, reasons = scorer.total_score(last, prev, info)
         score = float(max(-100, min(100, score)))
 
         # Map to action
-        if score >= config.scoring.buy_threshold:
+        if score >= effective_config.scoring.buy_threshold:
             action = Action.BUY
-        elif score <= config.scoring.sell_threshold:
+        elif score <= effective_config.scoring.sell_threshold:
             action = Action.SELL
         else:
             action = Action.HOLD
 
         # Build trade levels
-        entry, target, stop, rr = self._build_levels(action, price, last)
+        entry, target, stop, rr = self._build_levels(
+            action, price, last, effective_config
+        )
 
         # Assemble metrics
         metrics = self._build_metrics(price, last, info)
@@ -95,7 +104,11 @@ class AnalysisService:
         )
 
     def _build_levels(
-        self, action: Action, price: float, last: pd.Series
+        self,
+        action: Action,
+        price: float,
+        last: pd.Series,
+        app_config: AppConfig = config,
     ) -> tuple[float | None, float | None, float | None, float | None]:
         """Calculate entry, target, stop-loss, and R:R."""
         atr = float(last["ATR14"]) if pd.notna(last.get("ATR14")) else price * 0.03
@@ -107,15 +120,15 @@ class AnalysisService:
 
         if action == Action.BUY:
             entry = round(price, 2)
-            atr_stop = price - config.risk.atr_multiplier * atr
+            atr_stop = price - app_config.risk.atr_multiplier * atr
             candidates = [atr_stop]
             if sma50:
-                candidates.append(sma50 * config.risk.sma50_stop_discount)
+                candidates.append(sma50 * app_config.risk.sma50_stop_discount)
             valid = [c for c in candidates if c < price]
             stop = round(max(valid), 2) if valid else round(atr_stop, 2)
 
             risk = price - stop
-            tgt_candidates = [price + config.risk.risk_reward_target * risk]
+            tgt_candidates = [price + app_config.risk.risk_reward_target * risk]
             if high52 and high52 > price:
                 tgt_candidates.append(high52)
             target = round(min(tgt_candidates), 2)
@@ -123,9 +136,9 @@ class AnalysisService:
 
         elif action == Action.SELL:
             entry = round(price, 2)
-            stop = round(price + config.risk.atr_multiplier * atr, 2)
+            stop = round(price + app_config.risk.atr_multiplier * atr, 2)
             risk = stop - price
-            tgt_candidates = [price - config.risk.risk_reward_target * risk]
+            tgt_candidates = [price - app_config.risk.risk_reward_target * risk]
             if low52 and low52 < price:
                 tgt_candidates.append(low52)
             target = round(max(tgt_candidates), 2)

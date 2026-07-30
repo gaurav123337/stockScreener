@@ -1,6 +1,7 @@
 import { Suspense } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { usePwaInstall } from "@/app/hooks/usePwaInstall";
+import { useAuth } from "@/features/auth/auth-context";
 import styles from "./AppLayout.module.css";
 
 const TABS = [
@@ -14,6 +15,13 @@ const TABS = [
 
 export function AppLayout() {
   const { canInstall, promptInstall } = usePwaInstall();
+  const { user, isLoggedIn, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate("/auth/login", { replace: true });
+  }
 
   return (
     <>
@@ -22,11 +30,27 @@ export function AppLayout() {
           <img src="/icon.svg" alt="" className={styles.logo} />
           <span>stockScreener</span>
         </div>
-        {canInstall && (
-          <button className={styles.install} onClick={promptInstall}>
-            Install
-          </button>
-        )}
+        <div className={styles.topbarActions}>
+          {isLoggedIn && user && (
+            <span className={styles.userBadge} title={`Signed in as ${user.username}`}>
+              👤 {user.display_name || user.username}
+            </span>
+          )}
+          {canInstall && (
+            <button className={styles.install} onClick={promptInstall}>
+              Install
+            </button>
+          )}
+          {isLoggedIn ? (
+            <button className={styles.authBtn} onClick={handleLogout}>
+              Logout
+            </button>
+          ) : (
+            <NavLink to="/auth/login" className={styles.authBtn}>
+              Sign In
+            </NavLink>
+          )}
+        </div>
       </header>
 
       <main className={styles.view}>

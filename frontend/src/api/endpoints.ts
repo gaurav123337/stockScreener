@@ -1,5 +1,6 @@
 import { http } from "./client";
 import type {
+  AuthToken,
   BrokerConnectRequest,
   BrokerInstructionsResponse,
   BrokerStatusResponse,
@@ -13,11 +14,30 @@ import type {
   SearchResponse,
   Settings,
   SettingsPatch,
+  UserProfile,
   VerifyResponse,
+  WatchlistResponse,
 } from "@/types/api";
 
 /** Typed wrappers around every backend endpoint (see api.py). */
 export const api = {
+  /* Auth */
+  register: (body: { username: string; password: string; display_name?: string }) =>
+    http.post<AuthToken>("/api/auth/register", body),
+  login: (body: { username: string; password: string }) =>
+    http.post<AuthToken>("/api/auth/login", body),
+  logout: () => http.post<{ message: string }>("/api/auth/logout"),
+  me: () => http.get<UserProfile>("/api/auth/me"),
+
+  /* Preferences (per-user settings) */
+  preferences: () => http.get<Settings>("/api/preferences"),
+  updatePreferences: (patch: SettingsPatch) =>
+    http.post<Record<string, unknown>>("/api/preferences", { patch }),
+  resetPreferences: () => http.post<Record<string, unknown>>("/api/preferences/reset"),
+  watchlist: () => http.get<WatchlistResponse>("/api/preferences/watchlist"),
+  setWatchlist: (symbols: string[]) =>
+    http.post<WatchlistResponse>("/api/preferences/watchlist", { symbols }),
+
   /* Analysis */
   recommend: (symbol: string) =>
     http.get<ScanRow>(`/api/recommend/${encodeURIComponent(symbol)}`),
@@ -37,7 +57,7 @@ export const api = {
   learnFile: (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return http.post<LearnResult>("/api/learn/file", form);
+    return http.postForm<LearnResult>("/api/learn/file", form);
   },
   learnUrl: (url: string) => http.post<LearnResult>("/api/learn/url", { url }),
   learnNow: () => http.post<LearnResult>("/api/learn"),

@@ -7,7 +7,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
-from screener.core.config import config
+from screener.core.config import AppConfig, config
 from screener.core.models import Recommendation, ScanResult
 from screener.services.analysis_service import AnalysisService
 from screener.services.verification_service import VerificationService
@@ -30,13 +30,20 @@ class ScanService:
         predicate: Callable[[dict], bool] | None = None,
         top: int | None = None,
         max_workers: int | None = None,
+        app_config: AppConfig | None = None,
     ) -> ScanResult:
         """Scan symbols and return matched recommendations."""
-        symbols = symbols or config.default_universe
-        workers = max_workers or config.data.max_workers
+        effective_config = app_config or config
+        symbols = symbols or effective_config.default_universe
+        workers = max_workers or effective_config.data.max_workers
 
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            recommendations = list(ex.map(self._analysis.analyze, symbols))
+            recommendations = list(
+                ex.map(
+                    lambda symbol: self._analysis.analyze(symbol, app_config),
+                    symbols,
+                )
+            )
 
         # Log predictions for BUY/SELL
         for rec in recommendations:

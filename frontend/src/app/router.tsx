@@ -13,6 +13,8 @@ const TrainPage = lazy(() => import("@/features/train/TrainPage"));
 const BrokersPage = lazy(() => import("@/features/brokers/BrokersPage"));
 const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
 const GuidePage = lazy(() => import("@/features/guide/GuidePage"));
+const LoginPage = lazy(() => import("@/features/auth/LoginPage"));
+const RegisterPage = lazy(() => import("@/features/auth/RegisterPage"));
 
 export const router = createHashRouter([
   {
@@ -25,6 +27,8 @@ export const router = createHashRouter([
       { path: "brokers", element: <BrokersPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "guide", element: <GuidePage /> },
+      { path: "auth/login", element: <LoginPage /> },
+      { path: "auth/register", element: <RegisterPage /> },
       { path: "*", element: <Navigate to="/recommend" replace /> },
     ],
   },

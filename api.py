@@ -2,25 +2,49 @@
 
 Run:  python api.py     (or: uvicorn api:app --host 0.0.0.0 --port 8000)
 Open: http://localhost:8000
+
+Multi-tenant: every API endpoint accepts an optional `Authorization: Bearer <token>`
+header. When provided, the request is scoped to that user's preferences.
+When omitted, a built-in 'guest' user is used (backward-compatible).
+
+Robustness: every error is returned as a structured JSON response —
+never an HTML error page, never an unhandled exception.
 """
 from __future__ import annotations
 
+import traceback
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile, File
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from screener.bootstrap import bootstrap, get_service
 from screener.core.config import config
 from screener.core.interfaces import MarketDataProvider
+from screener.core.responses import (
+    ApiError,
+    AppException,
+    AuthError,
+    DataSourceError,
+    ErrorCodes,
+    NotFoundError,
+    ValidationError,
+)
+from screener.core.user_models import UserCreate, UserLogin, UserProfile
 from screener.services import (
     AnalysisService,
+    AuthService,
     BrokerService,
     FilterService,
     KnowledgeService,
+    PreferencesService,
     ScanService,
     VerificationService,
 )
@@ -34,75 +58,325 @@ DIST = ROOT / "frontend" / "dist"
 # Prefer the React build when present; fall back to the legacy vanilla SPA.
 WEB = DIST if (DIST / "index.html").exists() else LEGACY_WEB
 
-app = FastAPI(title="stockScreener", version="0.3.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                   allow_methods=["*"], allow_headers=["*"])
+# --------------------------------------------------------------------------- #
+# Lifespan (startup / shutdown)
+# --------------------------------------------------------------------------- #
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: ensure guest user exists. Shutdown: cleanup."""
+    auth = get_service(AuthService)
+    auth.ensure_guest_user()
+    yield
+
+
+app = FastAPI(
+    title="stockScreener",
+    version="0.4.0",
+    lifespan=lifespan,
+    docs_url=None,       # Disable auto-docs in production
+    redoc_url=None,
+    openapi_url=None,
+)
+
+# CORS — allow all for local dev
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --------------------------------------------------------------------------- #
+# Global exception handlers — NEVER return HTML error pages
+# --------------------------------------------------------------------------- #
+
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    """Handle our structured application exceptions."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.to_response(),
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Handle FastAPI/Starlette HTTP exceptions as JSON."""
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    code = ErrorCodes.NOT_FOUND if exc.status_code == 404 else ErrorCodes.INTERNAL_ERROR
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=ApiError.make(code, detail).model_dump(),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle Pydantic validation errors as structured JSON."""
+    errors = exc.errors()
+    messages = [f"{'.'.join(str(l) for l in e['loc'])}: {e['msg']}" for e in errors]
+    return JSONResponse(
+        status_code=422,
+        content=ApiError.make(
+            ErrorCodes.VALIDATION_ERROR,
+            "Invalid request: " + "; ".join(messages),
+            details={"errors": [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in errors]},
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """Catch-all for any unhandled exception — always returns JSON."""
+    # Log the traceback server-side for debugging
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content=ApiError.make(
+            ErrorCodes.INTERNAL_ERROR,
+            "An unexpected error occurred. Please try again later.",
+            details={"type": type(exc).__name__} if config.debug else None,
+        ).model_dump(),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Auth dependency — extract & validate Bearer token
+# --------------------------------------------------------------------------- #
+
+async def get_current_user(
+    authorization: str | None = Header(None),
+) -> UserProfile:
+    """Extract and validate the Bearer token. Returns the user profile.
+
+    If no token is provided, returns the guest user (backward-compatible).
+    If a token is provided but invalid, raises AuthError.
+    """
+    auth = get_service(AuthService)
+
+    if authorization is None:
+        return auth.ensure_guest_user()
+
+    # Expect "Bearer <token>"
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise AuthError(ErrorCodes.AUTH_INVALID, "Invalid Authorization header format. Expected 'Bearer <token>'")
+
+    token = parts[1].strip()
+    if not token:
+        raise AuthError(ErrorCodes.AUTH_REQUIRED, "Token is empty")
+
+    return auth.get_user_from_token(token)
+
+
+async def require_auth(
+    authorization: str | None = Header(None),
+) -> UserProfile:
+    """Strict auth — always requires a valid token (no guest fallback)."""
+    auth = get_service(AuthService)
+
+    if authorization is None:
+        raise AuthError(ErrorCodes.AUTH_REQUIRED, "Authentication required. Please log in.")
+
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise AuthError(ErrorCodes.AUTH_INVALID, "Invalid Authorization header format")
+
+    token = parts[1].strip()
+    if not token:
+        raise AuthError(ErrorCodes.AUTH_REQUIRED, "Token is empty")
+
+    return auth.get_user_from_token(token)
 
 
 # --------------------------------------------------------------------------- #
 # Request models
 # --------------------------------------------------------------------------- #
+
 class ScanBody(BaseModel):
     symbols: list[str] | None = None
     filter: str | None = None
     where: str | None = None
-    top: int | None = None
+    top: int | None = Field(None, ge=1, le=500)
 
 
 class UrlBody(BaseModel):
-    url: str
+    url: str = Field(..., min_length=10, max_length=2000)
 
 
 class BrokerBody(BaseModel):
-    broker: str
-    credentials: dict
+    broker: str = Field(..., min_length=1, max_length=50)
+    credentials: dict = Field(default_factory=dict)
 
 
 class SettingsBody(BaseModel):
-    # Partial patch, e.g. {"scoring": {"buy_threshold": 40}, "risk": {...}}
     patch: dict
+
+
+class PreferencesBody(BaseModel):
+    patch: dict
+
+
+class WatchlistBody(BaseModel):
+    symbols: list[str] = Field(..., max_length=200)
+
+
+# --------------------------------------------------------------------------- #
+# Auth APIs
+# --------------------------------------------------------------------------- #
+
+@app.post("/api/auth/register")
+def register(body: UserCreate):
+    """Create a new user account."""
+    auth = get_service(AuthService)
+    result = auth.register(body)
+    return result.model_dump(mode="json")
+
+
+@app.post("/api/auth/login")
+def login(body: UserLogin):
+    """Log in and get an access token."""
+    auth = get_service(AuthService)
+    result = auth.login(body)
+    return result.model_dump(mode="json")
+
+
+@app.get("/api/auth/me")
+def get_me(user: UserProfile = Depends(get_current_user)):
+    """Get the current user's profile."""
+    return user.model_dump(mode="json")
+
+
+@app.post("/api/auth/logout")
+def logout(user: UserProfile = Depends(get_current_user)):
+    """Log out (client-side token removal; server is stateless)."""
+    return {"message": "Logged out successfully"}
+
+
+# --------------------------------------------------------------------------- #
+# Preferences APIs (per-user settings)
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/preferences")
+def get_preferences(user: UserProfile = Depends(get_current_user)):
+    """Get the current user's preferences (merged with defaults)."""
+    prefs = get_service(PreferencesService)
+    return prefs.get_merged_config(user.user_id)
+
+
+@app.post("/api/preferences")
+def update_preferences(body: PreferencesBody, user: UserProfile = Depends(get_current_user)):
+    """Update the current user's preferences."""
+    prefs = get_service(PreferencesService)
+    return prefs.update_preferences(user.user_id, body.patch)
+
+
+@app.post("/api/preferences/reset")
+def reset_preferences(user: UserProfile = Depends(get_current_user)):
+    """Reset the current user's preferences to system defaults."""
+    prefs = get_service(PreferencesService)
+    return prefs.reset_preferences(user.user_id)
+
+
+@app.get("/api/preferences/watchlist")
+def get_watchlist(user: UserProfile = Depends(get_current_user)):
+    """Get the current user's personal watchlist."""
+    prefs = get_service(PreferencesService)
+    return {"symbols": prefs.get_watchlist(user.user_id)}
+
+
+@app.post("/api/preferences/watchlist")
+def set_watchlist(body: WatchlistBody, user: UserProfile = Depends(get_current_user)):
+    """Set the current user's personal watchlist."""
+    prefs = get_service(PreferencesService)
+    return {"symbols": prefs.set_watchlist(user.user_id, body.symbols)}
 
 
 # --------------------------------------------------------------------------- #
 # Analysis APIs
 # --------------------------------------------------------------------------- #
+
 @app.get("/api/recommend/{symbol}")
-def recommend(symbol: str):
+def recommend(symbol: str, user: UserProfile = Depends(get_current_user)):
+    """Get a recommendation for a symbol."""
+    if not symbol or len(symbol) > 50:
+        raise ValidationError("Invalid symbol")
+
     analysis = get_service(AnalysisService)
     broker = get_service(BrokerService)
+    preferences = get_service(PreferencesService)
     verification = get_service(VerificationService)
+    effective_config = preferences.get_effective_config(user.user_id)
 
-    rec = analysis.analyze(symbol)
+    try:
+        rec = analysis.analyze(symbol, effective_config)
+    except Exception as e:
+        raise DataSourceError(f"Unable to analyze {symbol}: {e}")
+
+    if rec.error is not None:
+        raise AppException(
+            ErrorCodes.INSUFFICIENT_DATA,
+            f"No recommendation is available for {symbol.upper()}: {rec.error}.",
+            422,
+        )
+
     # Use broker LTP if available
-    live = broker.get_ltp(symbol)
-    if live and rec.error is None:
-        rec.price = round(live, 2)
+    try:
+        live = broker.get_ltp(symbol)
+        if live and rec.error is None:
+            rec.price = round(live, 2)
+    except Exception:
+        pass  # Broker LTP is optional — never fail because of it
 
     if rec.error is None:
-        verification.log_prediction(rec)
+        try:
+            verification.log_prediction(rec)
+        except Exception:
+            pass  # Logging is non-critical
 
     return rec.to_scan_row()
 
 
 @app.post("/api/scan")
-def scan(body: ScanBody):
+def scan(body: ScanBody, user: UserProfile = Depends(get_current_user)):
+    """Scan a universe of stocks with optional filtering."""
     scan_service = get_service(ScanService)
     filter_service = get_service(FilterService)
+    prefs = get_service(PreferencesService)
+    effective_config = prefs.get_effective_config(user.user_id)
+
+    # Use user's watchlist if no symbols specified
+    symbols = body.symbols
+    if not symbols:
+        symbols = prefs.get_watchlist(user.user_id)
 
     predicate = None
     if body.filter:
         filter_strategy = filter_service.get_filter(body.filter)
         if not filter_strategy:
-            return JSONResponse({"error": f"unknown filter {body.filter}"}, 400)
+            raise ValidationError(
+                f"Unknown filter '{body.filter}'",
+                details={"available_filters": [f["name"] for f in filter_service.list_filters()]},
+            )
         predicate = filter_strategy.matches
     elif body.where:
         try:
             expr_filter = filter_service.compile_custom(body.where)
             predicate = expr_filter.matches
         except Exception as e:
-            return JSONResponse({"error": f"bad expression: {e}"}, 400)
+            raise ValidationError(f"Invalid expression: {e}")
 
-    result = scan_service.scan(body.symbols, predicate, body.top)
+    try:
+        result = scan_service.scan(
+            symbols,
+            predicate,
+            body.top,
+            app_config=effective_config,
+        )
+    except Exception as e:
+        raise DataSourceError(f"Scan failed: {e}")
+
     return {
         "count": len(result.matched),
         "failed": result.failed,
@@ -111,7 +385,8 @@ def scan(body: ScanBody):
 
 
 @app.get("/api/filters")
-def list_filters():
+def list_filters(user: UserProfile = Depends(get_current_user)):
+    """List all available predefined filters."""
     filter_service = get_service(FilterService)
     return {
         "predefined": filter_service.list_filters(),
@@ -120,129 +395,212 @@ def list_filters():
 
 
 @app.get("/api/search")
-def search(q: str = ""):
+def search(q: str = "", user: UserProfile = Depends(get_current_user)):
     """Search for a stock by symbol or company name (NSE & BSE)."""
+    if not q or len(q) < 1:
+        return {"query": q, "results": []}
+    if len(q) > 100:
+        raise ValidationError("Search query too long (max 100 characters)")
+
     data = get_service(MarketDataProvider)
     searcher = getattr(data, "search", None)
     if not callable(searcher):
         return {"query": q, "results": []}
-    return {"query": q, "results": searcher(q)}
+
+    try:
+        return {"query": q, "results": searcher(q)}
+    except Exception:
+        return {"query": q, "results": [], "warning": "Search temporarily unavailable"}
 
 
 @app.get("/api/verify")
-def verify():
+def verify(user: UserProfile = Depends(get_current_user)):
+    """Verify past predictions against current prices."""
     verification = get_service(VerificationService)
     broker = get_service(BrokerService)
 
     def price_of(sym: str):
-        live = broker.get_ltp(sym)
-        if live:
-            return live
+        try:
+            live = broker.get_ltp(sym)
+            if live:
+                return live
+        except Exception:
+            pass
         return verification.get_current_price(sym)
 
-    return verification.verify(price_of).model_dump()
+    try:
+        return verification.verify(price_of).model_dump(mode="json")
+    except Exception as e:
+        raise DataSourceError(f"Verification failed: {e}")
 
 
 # --------------------------------------------------------------------------- #
-# Settings / Dashboard APIs
+# Settings / Dashboard APIs (system-level; per-user via /api/preferences)
 # --------------------------------------------------------------------------- #
+
 @app.get("/api/settings")
-def get_settings():
-    """Current value of every dashboard-editable setting."""
-    return config.editable_snapshot()
+def get_settings(user: UserProfile = Depends(get_current_user)):
+    """Current value of every dashboard-editable setting (user's effective config)."""
+    prefs = get_service(PreferencesService)
+    return prefs.get_merged_config(user.user_id)
 
 
 @app.get("/api/settings/defaults")
-def get_settings_defaults():
+def get_settings_defaults(user: UserProfile = Depends(get_current_user)):
     """Factory defaults (for the UI 'reset to default' reference)."""
     return config._defaults()
 
 
 @app.post("/api/settings")
-def update_settings(body: SettingsBody):
-    """Apply a partial settings patch and persist it."""
-    try:
-        return config.update_settings(body.patch)
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+def update_settings(body: SettingsBody, user: UserProfile = Depends(get_current_user)):
+    """Apply a partial settings patch (user-scoped)."""
+    prefs = get_service(PreferencesService)
+    return prefs.update_preferences(user.user_id, body.patch)
 
 
 @app.post("/api/settings/reset")
-def reset_settings():
-    """Restore factory defaults and clear persisted overrides."""
-    return config.reset_settings()
+def reset_settings(user: UserProfile = Depends(get_current_user)):
+    """Restore factory defaults for the current user."""
+    prefs = get_service(PreferencesService)
+    return prefs.reset_preferences(user.user_id)
 
 
 # --------------------------------------------------------------------------- #
 # Knowledge / Training APIs
 # --------------------------------------------------------------------------- #
+
 @app.post("/api/learn/file")
-async def learn_file(file: UploadFile = File(...)):
+async def learn_file(
+    file: UploadFile = File(...),
+    user: UserProfile = Depends(get_current_user),
+):
+    """Upload a file to ingest into the knowledge base."""
     knowledge = get_service(KnowledgeService)
+
+    # Validate file extension
+    allowed = config.knowledge.allowed_extensions
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in allowed:
+        raise ValidationError(
+            f"Unsupported file type '{suffix}'. Allowed: {', '.join(sorted(allowed))}",
+            details={"allowed_extensions": sorted(allowed)},
+        )
+
+    # Limit file size (10 MB)
+    MAX_SIZE = 10 * 1024 * 1024
     content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise ValidationError("File too large (max 10 MB)")
+
     # Save to temp file then ingest
-    temp_path = config.knowledge_dir / file.filename
-    temp_path.write_bytes(content)
-    return knowledge.learn_from_file(temp_path).model_dump()
+    temp_path = config.knowledge_dir / (file.filename or "upload")
+    try:
+        temp_path.write_bytes(content)
+        result = knowledge.learn_from_file(temp_path)
+        return result.model_dump(mode="json")
+    except Exception as e:
+        raise AppException(ErrorCodes.INGESTION_ERROR, f"Failed to ingest file: {e}", 500)
+    finally:
+        # Clean up temp file
+        try:
+            temp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 @app.post("/api/learn/url")
-def learn_url(body: UrlBody):
+def learn_url(body: UrlBody, user: UserProfile = Depends(get_current_user)):
+    """Ingest knowledge from a URL."""
     knowledge = get_service(KnowledgeService)
-    return knowledge.learn_from_url(body.url).model_dump()
+    try:
+        result = knowledge.learn_from_url(body.url)
+        return result.model_dump(mode="json")
+    except Exception as e:
+        raise AppException(ErrorCodes.INGESTION_ERROR, f"Failed to ingest URL: {e}", 500)
 
 
 @app.post("/api/learn")
-def learn_now():
+def learn_now(user: UserProfile = Depends(get_current_user)):
+    """Ingest all files from the knowledge directory."""
     knowledge = get_service(KnowledgeService)
-    return knowledge.learn_from_directory().model_dump()
+    try:
+        result = knowledge.learn_from_directory()
+        return result.model_dump(mode="json")
+    except Exception as e:
+        raise AppException(ErrorCodes.INGESTION_ERROR, f"Learning failed: {e}", 500)
 
 
 @app.get("/api/knowledge")
-def get_knowledge():
+def get_knowledge(user: UserProfile = Depends(get_current_user)):
+    """Get the current knowledge base content."""
     knowledge = get_service(KnowledgeService)
-    return {
-        "path": str(config.kb_file),
-        "content": knowledge.get_knowledge_content(),
-    }
+    try:
+        return {
+            "path": str(config.kb_file),
+            "content": knowledge.get_knowledge_content(),
+        }
+    except Exception as e:
+        raise AppException(ErrorCodes.INGESTION_ERROR, f"Failed to read knowledge base: {e}", 500)
 
 
 # --------------------------------------------------------------------------- #
 # Broker APIs
 # --------------------------------------------------------------------------- #
+
 @app.get("/api/brokers/instructions")
-def broker_instructions():
+def broker_instructions(user: UserProfile = Depends(get_current_user)):
+    """Get connection instructions for all brokers."""
     broker = get_service(BrokerService)
-    return broker.get_instructions()
+    try:
+        return broker.get_instructions()
+    except Exception as e:
+        raise AppException(ErrorCodes.BROKER_ERROR, f"Failed to get instructions: {e}", 500)
 
 
 @app.get("/api/brokers/status")
-def broker_status():
+def broker_status(user: UserProfile = Depends(get_current_user)):
+    """Get connection status for all brokers."""
     broker = get_service(BrokerService)
-    return broker.get_status()
+    try:
+        return broker.get_status()
+    except Exception as e:
+        raise AppException(ErrorCodes.BROKER_ERROR, f"Failed to get status: {e}", 500)
 
 
 @app.post("/api/brokers/connect")
-def broker_connect(body: BrokerBody):
+def broker_connect(body: BrokerBody, user: UserProfile = Depends(get_current_user)):
+    """Connect a broker with credentials."""
     broker = get_service(BrokerService)
-    return broker.connect(body.broker, body.credentials)
+    try:
+        return broker.connect(body.broker, body.credentials)
+    except Exception as e:
+        raise AppException(ErrorCodes.BROKER_ERROR, f"Connection failed: {e}", 500)
 
 
-@app.post("/api/brokers/disconnect/{broker}")
-def broker_disconnect(broker: str):
+@app.post("/api/brokers/disconnect/{broker_name}")
+def broker_disconnect(broker_name: str, user: UserProfile = Depends(get_current_user)):
+    """Disconnect a broker."""
     service = get_service(BrokerService)
-    return service.disconnect(broker)
+    try:
+        return service.disconnect(broker_name)
+    except Exception as e:
+        raise AppException(ErrorCodes.BROKER_ERROR, f"Disconnect failed: {e}", 500)
 
 
 @app.get("/api/brokers/holdings")
-def broker_holdings():
+def broker_holdings(user: UserProfile = Depends(get_current_user)):
+    """Get holdings from connected broker."""
     broker = get_service(BrokerService)
-    return broker.get_holdings()
+    try:
+        return broker.get_holdings()
+    except Exception as e:
+        raise AppException(ErrorCodes.BROKER_ERROR, f"Failed to fetch holdings: {e}", 500)
 
 
 # --------------------------------------------------------------------------- #
 # SPA + static + PWA assets
 # --------------------------------------------------------------------------- #
+
 @app.get("/manifest.json")
 def manifest():
     # Vite PWA emits manifest.webmanifest; the legacy SPA used manifest.json.
@@ -259,6 +617,8 @@ def service_worker():
 
 @app.get("/{full_path:path}")
 def spa(full_path: str):
+    if full_path == "api" or full_path.startswith("api/"):
+        raise NotFoundError(f"API route '/{full_path}' was not found")
     # serve real files if they exist (css/js/icons), else index.html (SPA routing)
     candidate = WEB / full_path
     if full_path and candidate.exists() and candidate.is_file():

@@ -7,13 +7,16 @@ from __future__ import annotations
 
 import pandas as pd
 
-from screener.core.config import config
+from screener.core.config import ScoringConfig, config
 from screener.core.interfaces import ScoringStrategy
 from screener.core.plugins import registry
 
 
 class TrendScorer(ScoringStrategy):
     """Scores trend vs moving averages."""
+
+    def __init__(self, scoring_config: ScoringConfig | None = None):
+        self._config = scoring_config or config.scoring
 
     @property
     def name(self) -> str:
@@ -27,26 +30,26 @@ class TrendScorer(ScoringStrategy):
 
         if pd.notna(sma50):
             if price > sma50:
-                score += config.scoring.trend_weight_sma50
+                score += self._config.trend_weight_sma50
                 reasons.append(f"Price above 50-DMA ({sma50:.1f}) — short-term uptrend")
             else:
-                score -= config.scoring.trend_weight_sma50
+                score -= self._config.trend_weight_sma50
                 reasons.append(f"Price below 50-DMA ({sma50:.1f}) — short-term weakness")
 
         if pd.notna(sma200):
             if price > sma200:
-                score += config.scoring.trend_weight_sma200
+                score += self._config.trend_weight_sma200
                 reasons.append(f"Price above 200-DMA ({sma200:.1f}) — long-term uptrend")
             else:
-                score -= config.scoring.trend_weight_sma200
+                score -= self._config.trend_weight_sma200
                 reasons.append(f"Price below 200-DMA ({sma200:.1f}) — long-term downtrend")
 
         if pd.notna(sma50) and pd.notna(sma200):
             if sma50 > sma200:
-                score += config.scoring.trend_weight_cross
+                score += self._config.trend_weight_cross
                 reasons.append("Golden-cross alignment (50-DMA > 200-DMA)")
             else:
-                score -= config.scoring.trend_weight_cross
+                score -= self._config.trend_weight_cross
                 reasons.append("Death-cross alignment (50-DMA < 200-DMA)")
 
         return score, reasons
@@ -54,6 +57,9 @@ class TrendScorer(ScoringStrategy):
 
 class MomentumScorer(ScoringStrategy):
     """Scores RSI and MACD momentum."""
+
+    def __init__(self, scoring_config: ScoringConfig | None = None):
+        self._config = scoring_config or config.scoring
 
     @property
     def name(self) -> str:
@@ -66,10 +72,10 @@ class MomentumScorer(ScoringStrategy):
 
         if pd.notna(r):
             if r >= 70:
-                score -= config.scoring.momentum_weight_rsi
+                score -= self._config.momentum_weight_rsi
                 reasons.append(f"RSI {r:.0f} — overbought, pullback risk")
             elif r >= 55:
-                score += config.scoring.momentum_weight_rsi
+                score += self._config.momentum_weight_rsi
                 reasons.append(f"RSI {r:.0f} — healthy bullish momentum")
             elif r >= 45:
                 reasons.append(f"RSI {r:.0f} — neutral")
@@ -86,16 +92,16 @@ class MomentumScorer(ScoringStrategy):
 
         if pd.notna(macd) and pd.notna(sig):
             if macd > sig:
-                score += config.scoring.momentum_weight_macd
+                score += self._config.momentum_weight_macd
                 reasons.append("MACD above signal — bullish momentum")
                 if pd.notna(p_macd) and pd.notna(p_sig) and p_macd <= p_sig:
-                    score += config.scoring.momentum_weight_crossover
+                    score += self._config.momentum_weight_crossover
                     reasons.append("Fresh MACD bullish crossover")
             else:
-                score -= config.scoring.momentum_weight_macd
+                score -= self._config.momentum_weight_macd
                 reasons.append("MACD below signal — bearish momentum")
                 if pd.notna(p_macd) and pd.notna(p_sig) and p_macd >= p_sig:
-                    score -= config.scoring.momentum_weight_crossover
+                    score -= self._config.momentum_weight_crossover
                     reasons.append("Fresh MACD bearish crossover")
 
         return score, reasons
@@ -103,6 +109,9 @@ class MomentumScorer(ScoringStrategy):
 
 class VolumeScorer(ScoringStrategy):
     """Scores volume participation."""
+
+    def __init__(self, scoring_config: ScoringConfig | None = None):
+        self._config = scoring_config or config.scoring
 
     @property
     def name(self) -> str:
@@ -113,7 +122,7 @@ class VolumeScorer(ScoringStrategy):
         if pd.notna(v) and pd.notna(va) and va > 0:
             ratio = v / va
             if ratio >= 1.5:
-                return config.scoring.volume_weight, [
+                return self._config.volume_weight, [
                     f"Volume {ratio:.1f}x 20-day avg — strong participation"
                 ]
         return 0.0, []
@@ -121,6 +130,9 @@ class VolumeScorer(ScoringStrategy):
 
 class FundamentalScorer(ScoringStrategy):
     """Scores PEG, ROE, and debt levels."""
+
+    def __init__(self, scoring_config: ScoringConfig | None = None):
+        self._config = scoring_config or config.scoring
 
     @property
     def name(self) -> str:
@@ -140,10 +152,10 @@ class FundamentalScorer(ScoringStrategy):
 
         if peg is not None:
             if peg < 1:
-                score += config.scoring.fundamental_peg_weight
+                score += self._config.fundamental_peg_weight
                 reasons.append(f"PEG {peg:.2f} < 1 — undervalued vs growth")
             elif peg > 2:
-                score -= config.scoring.fundamental_peg_weight
+                score -= self._config.fundamental_peg_weight
                 reasons.append(f"PEG {peg:.2f} > 2 — expensive vs growth")
         elif pe is not None and eg is not None and eg > 0:
             implied = pe / (eg * 100)
@@ -156,7 +168,7 @@ class FundamentalScorer(ScoringStrategy):
 
         if roe is not None:
             if roe >= 0.15:
-                score += config.scoring.fundamental_roe_weight
+                score += self._config.fundamental_roe_weight
                 reasons.append(f"ROE {roe*100:.0f}% — quality business")
             elif roe < 0.08:
                 score -= 6
@@ -164,7 +176,7 @@ class FundamentalScorer(ScoringStrategy):
 
         if de is not None:
             if de <= 100:
-                score += config.scoring.fundamental_debt_weight
+                score += self._config.fundamental_debt_weight
                 reasons.append(f"Debt/Equity {de/100:.2f} — manageable")
             else:
                 score -= 8
@@ -176,13 +188,18 @@ class FundamentalScorer(ScoringStrategy):
 class ScoringEngine:
     """Orchestrates all registered scorers."""
 
-    def __init__(self, use_registry: bool = True):
+    def __init__(
+        self,
+        use_registry: bool = True,
+        scoring_config: ScoringConfig | None = None,
+    ):
         self._use_registry = use_registry
+        scoring_config = scoring_config or config.scoring
         self._default_scorers: list[ScoringStrategy] = [
-            TrendScorer(),
-            MomentumScorer(),
-            VolumeScorer(),
-            FundamentalScorer(),
+            TrendScorer(scoring_config),
+            MomentumScorer(scoring_config),
+            VolumeScorer(scoring_config),
+            FundamentalScorer(scoring_config),
         ]
 
     def total_score(

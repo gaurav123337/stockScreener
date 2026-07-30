@@ -5,6 +5,26 @@
 
 export type Action = "BUY" | "SELL" | "HOLD";
 
+/* ---------------------------------- Auth ------------------------------------ */
+
+export interface UserProfile {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  created_at: string;
+  preferences: Record<string, unknown>;
+}
+
+export interface AuthToken {
+  token: string;
+  user: UserProfile;
+  expires_at: string;
+}
+
+export interface WatchlistResponse {
+  symbols: string[];
+}
+
 /** Row shape returned by /api/recommend/{symbol} and inside /api/scan results. */
 export interface ScanRow {
   symbol: string;

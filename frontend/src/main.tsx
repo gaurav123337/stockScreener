@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { router } from "@/app/router";
 import { queryClient } from "@/app/queryClient";
 import { ToastProvider } from "@/app/toast";
+import { AuthProvider } from "@/features/auth/AuthProvider";
 import "@/styles/global.css";
 
 const container = document.getElementById("root");
@@ -14,7 +15,9 @@ createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <RouterProvider router={router} />
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
       </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,

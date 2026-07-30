@@ -8,9 +8,11 @@ env/
 
 # Secrets & local settings — never commit broker credentials
 data/broker_settings.json
+data/.secret_key
 
 # Runtime data / logs
 data/predictions.csv
+data/users.db
 
 # Learned knowledge manifest (local state)
 knowledge_graph/.learn_manifest.json

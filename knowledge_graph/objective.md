@@ -11,3 +11,8 @@ UI must be simple.
 Some users also has access of apis alos like angel one, zerodha paltform. So they can also integrated them for better results and provide instructions also to use the platform to its fullest.
 
 Ok, when scan happens and result came so on click of each record I should see the reason also which is not present currently.
+
+I want to make it multi tenent so that it can be customized as per specific user need.
+Basically user can set their preferences.
+And I want platform robust so that it will never hallucinate in any condition.
+It provides the appropriate message.
