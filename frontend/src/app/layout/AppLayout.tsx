@@ -1,29 +1,42 @@
-import { Suspense } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { usePwaInstall } from "@/app/hooks/usePwaInstall";
+import { useTheme } from "@/app/hooks/useTheme";
+import { LoadingState } from "@/components/ui/Spinner";
+import { useAuth } from "@/features/auth/auth-context";
+import { cn } from "@/lib/cn";
 import {
   BrainCircuit,
   CircleHelp,
   Download,
   LogIn,
   LogOut,
+  Menu,
   MessageSquareHeart,
+  Moon,
   ScanSearch,
   Settings,
+  Sun,
   TrendingUp,
   UserRound,
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
-import { usePwaInstall } from "@/app/hooks/usePwaInstall";
-import { LoadingState } from "@/components/ui/Spinner";
-import { useAuth } from "@/features/auth/auth-context";
-import { cn } from "@/lib/cn";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
-const TABS: ReadonlyArray<{ to: string; icon: LucideIcon; label: string }> = [
-  { to: "/recommend", icon: TrendingUp, label: "Recommend" },
+interface NavigationItem {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+}
+
+const PRIMARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
+  { to: "/recommend", icon: TrendingUp, label: "Recommended" },
   { to: "/scan", icon: ScanSearch, label: "Scan" },
   { to: "/train", icon: BrainCircuit, label: "Train" },
-  { to: "/brokers", icon: WalletCards, label: "Brokers" },
+  { to: "/brokers", icon: WalletCards, label: "Broker" },
+];
+
+const SECONDARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
   { to: "/settings", icon: Settings, label: "Settings" },
   { to: "/guide", icon: CircleHelp, label: "Guide" },
   { to: "/feedback", icon: MessageSquareHeart, label: "Feedback" },
@@ -32,14 +45,14 @@ const TABS: ReadonlyArray<{ to: string; icon: LucideIcon; label: string }> = [
 function PrimaryNavigation({ className }: { className?: string }) {
   return (
     <nav className={className} aria-label="Primary navigation">
-      {TABS.map(({ to, icon: Icon, label }) => (
+      {PRIMARY_DESTINATIONS.map(({ to, icon: Icon, label }) => (
         <NavLink
           key={to}
           to={to}
           className={({ isActive }) =>
             cn(
-              "flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold text-muted transition-colors hover:bg-slate-800 hover:text-ink md:justify-start md:px-3 md:py-2.5 md:text-sm",
-              isActive && "bg-emerald-500/15 text-emerald-300",
+              "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-semibold text-muted transition-colors hover:bg-surface-raised hover:text-ink md:flex-row md:justify-start md:gap-2 md:px-3 md:py-2.5 md:text-sm",
+              isActive && "bg-emerald-500/15 text-brand",
             )
           }
         >
@@ -51,9 +64,76 @@ function PrimaryNavigation({ className }: { className?: string }) {
   );
 }
 
+function SecondaryNavigation() {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+
+  useEffect(() => setIsOpen(false), [location.pathname]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setIsOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        className="inline-flex size-9 items-center justify-center rounded-lg border border-border text-ink transition-colors hover:bg-surface-raised"
+        aria-label="Open more navigation"
+        aria-controls="secondary-navigation"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <Menu className="size-5" aria-hidden />
+      </button>
+
+      {isOpen && (
+        <nav
+          id="secondary-navigation"
+          className="absolute right-0 top-11 z-40 grid min-w-48 gap-1 rounded-panel border border-border bg-surface p-2 shadow-panel"
+          aria-label="More navigation"
+        >
+          {SECONDARY_DESTINATIONS.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-surface-raised hover:text-ink",
+                  isActive && "bg-emerald-500/15 text-brand",
+                )
+              }
+            >
+              <Icon className="size-5" aria-hidden />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+      )}
+    </div>
+  );
+}
+
 export function AppLayout() {
   const { canInstall, promptInstall } = usePwaInstall();
   const { user, isLoggedIn, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   function handleLogout() {
@@ -67,7 +147,7 @@ export function AppLayout() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <NavLink to="/recommend" className="flex min-w-0 items-center gap-2 font-bold text-ink">
             <img src="/icon.svg" alt="" className="size-8 shrink-0 rounded-lg" />
-            <span className="truncate">stockScreener</span>
+            <span className="hidden truncate sm:inline">stockScreener</span>
           </NavLink>
           <div className="flex items-center gap-2">
             {isLoggedIn && user && (
@@ -89,6 +169,20 @@ export function AppLayout() {
                 <span className="hidden sm:inline">Install</span>
               </button>
             )}
+            <button
+              type="button"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-border text-ink transition-colors hover:bg-surface-raised"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            >
+              {theme === "dark" ? (
+                <Sun className="size-4" aria-hidden />
+              ) : (
+                <Moon className="size-4" aria-hidden />
+              )}
+            </button>
+            <SecondaryNavigation />
             {isLoggedIn ? (
               <button
                 type="button"
@@ -122,7 +216,7 @@ export function AppLayout() {
         </main>
       </div>
 
-      <PrimaryNavigation className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-border bg-canvas/95 px-1 pt-1 pb-[calc(0.25rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden" />
+      <PrimaryNavigation className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border bg-canvas/95 px-1 pt-1 pb-[calc(0.25rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden" />
     </div>
   );
 }

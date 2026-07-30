@@ -26,24 +26,36 @@ export function SettingsSectionCard(props: SettingsSectionCardProps) {
         {Object.entries(sectionData).map(([key, value]) => {
           if (Array.isArray(value)) return null;
           const isNumber = typeof value === "number";
+          const isBoolean = typeof value === "boolean";
           return (
             <label
               className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-center"
               key={key}
             >
-              <span className="text-sm font-semibold text-slate-200">
+              <span className="text-sm font-semibold text-ink">
                 {label(key)}
                 <span className="block text-xs font-normal text-muted">
                   default {String(defaultsData[key])}
                 </span>
               </span>
-              <input
-                className={controlClass}
-                type={isNumber ? "number" : "text"}
-                step={isNumber ? "any" : undefined}
-                defaultValue={String(value)}
-                {...register(`${section}.${key}`)}
-              />
+              {isBoolean ? (
+                <span className="flex justify-start sm:justify-end">
+                  <input
+                    className="size-6 cursor-pointer appearance-none rounded-md border-2 border-muted bg-surface shadow-sm transition-colors checked:border-brand checked:bg-brand checked:bg-[url('data:image/svg+xml,%3Csvg_viewBox=%220_0_16_16%22_xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cpath_d=%22m3_8_3_3_7-7%22_fill=%22none%22_stroke=%22white%22_stroke-linecap=%22round%22_stroke-linejoin=%22round%22_stroke-width=%222.5%22/%3E%3C/svg%3E')] checked:bg-center checked:bg-no-repeat hover:border-brand"
+                    type="checkbox"
+                    defaultChecked={value}
+                    {...register(`${section}.${key}`)}
+                  />
+                </span>
+              ) : (
+                <input
+                  className={controlClass}
+                  type={isNumber ? "number" : "text"}
+                  step={isNumber ? "any" : undefined}
+                  defaultValue={String(value)}
+                  {...register(`${section}.${key}`)}
+                />
+              )}
             </label>
           );
         })}

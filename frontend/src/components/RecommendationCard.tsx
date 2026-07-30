@@ -3,9 +3,9 @@ import { fmt, pct, stripExchangeSuffix } from "@/lib/format";
 import type { ScanRow } from "@/types/api";
 
 const actionStyles: Record<string, { border: string; badge: string }> = {
-  BUY: { border: "border-l-4 border-l-emerald-500", badge: "bg-emerald-500/15 text-emerald-300" },
-  SELL: { border: "border-l-4 border-l-rose-500", badge: "bg-rose-500/15 text-rose-300" },
-  HOLD: { border: "border-l-4 border-l-yellow-400", badge: "bg-yellow-400/15 text-yellow-300" },
+  BUY: { border: "border-l-4 border-l-emerald-500", badge: "bg-emerald-500/15 text-brand" },
+  SELL: { border: "border-l-4 border-l-rose-500", badge: "bg-rose-500/15 text-danger" },
+  HOLD: { border: "border-l-4 border-l-yellow-400", badge: "bg-yellow-400/15 text-warning" },
 };
 
 export function RecommendationCard({ row }: { row: ScanRow }) {
@@ -13,7 +13,7 @@ export function RecommendationCard({ row }: { row: ScanRow }) {
     return (
       <div className="mb-3 rounded-panel border border-rose-500/40 bg-surface p-3.5">
         <div className="text-[17px] font-bold">{row.symbol}</div>
-        <div className="mt-2 text-xs text-rose-300">Error: {row.error}</div>
+        <div className="mt-2 text-xs text-danger">Error: {row.error}</div>
       </div>
     );
   }
@@ -76,7 +76,7 @@ export function RecommendationCard({ row }: { row: ScanRow }) {
       </div>
 
       {row.reasons && row.reasons.length > 0 && (
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-[13px] text-slate-200">
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-[13px] text-ink">
           {row.reasons.map((reason) => (
             <li key={reason}>{reason}</li>
           ))}

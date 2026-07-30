@@ -46,7 +46,7 @@ export default function SettingsPage() {
     const err = (settingsQuery.error ?? defaultsQuery.error) as unknown;
     return (
       <div
-        className="rounded-panel border border-rose-500/40 bg-rose-500/10 p-4 text-center text-sm text-rose-200"
+        className="rounded-panel border border-rose-500/40 bg-rose-500/10 p-4 text-center text-sm text-danger"
         role="alert"
       >
         {err instanceof Error ? err.message : "Failed to load settings"}

@@ -40,7 +40,7 @@ export function StockAutocomplete(props: StockAutocompleteProps) {
               <button
                 type="button"
                 key={`${result.symbol}-${result.exchange}`}
-                className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-slate-700/60"
+                className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-surface-raised"
                 onClick={() => onSelect(result.symbol)}
               >
                 <span>

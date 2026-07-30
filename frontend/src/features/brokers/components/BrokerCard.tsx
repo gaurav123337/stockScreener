@@ -38,7 +38,7 @@ export function BrokerCard(props: BrokerCardProps) {
         <span
           className={cn(
             "whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-extrabold",
-            connected ? "bg-emerald-500/15 text-emerald-300" : "bg-yellow-400/15 text-yellow-300",
+            connected ? "bg-emerald-500/15 text-brand" : "bg-yellow-400/15 text-warning",
           )}
         >
           {connected ? "Connected" : "Not connected"}
@@ -46,7 +46,7 @@ export function BrokerCard(props: BrokerCardProps) {
       </div>
       <p className={cn(helpTextClass, "my-2")}>
         Library:{" "}
-        <code className="rounded bg-canvas px-1.5 py-0.5 text-slate-200">
+        <code className="rounded bg-canvas px-1.5 py-0.5 text-ink">
           {props.instruction.library}
         </code>{" "}
         {props.status?.library_installed ? "(installed)" : "(run in terminal)"}

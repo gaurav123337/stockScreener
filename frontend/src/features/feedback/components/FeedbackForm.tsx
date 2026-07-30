@@ -123,7 +123,7 @@ export function FeedbackForm() {
         </div>
         {formError && (
           <div
-            className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200"
+            className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-danger"
             role="alert"
           >
             {formError}
@@ -139,7 +139,7 @@ export function FeedbackForm() {
 
 function FeedbackNotice() {
   return (
-    <div className="mb-5 flex items-start gap-3 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3.5 text-blue-200">
+    <div className="mb-5 flex items-start gap-3 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3.5 text-focus">
       <MessageSquareHeart className="mt-0.5 size-5 shrink-0" aria-hidden />
       <div>
         <strong className="block text-sm">Your feedback shapes the next test build</strong>

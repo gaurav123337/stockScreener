@@ -17,13 +17,10 @@ export function RichTextField(props: RichTextFieldProps) {
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
-        <span className="text-sm font-semibold text-slate-200">Details</span>
+        <span className="text-sm font-semibold text-ink">Details</span>
         <small
           id="feedback-details-count"
-          className={cn(
-            "text-xs text-muted",
-            props.count >= DETAILS_MAX * 0.9 && "text-yellow-300",
-          )}
+          className={cn("text-xs text-muted", props.count >= DETAILS_MAX * 0.9 && "text-warning")}
         >
           {props.count.toLocaleString()}/{DETAILS_MAX.toLocaleString()}
         </small>

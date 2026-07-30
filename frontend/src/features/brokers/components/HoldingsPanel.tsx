@@ -16,7 +16,7 @@ export function HoldingsPanel(props: {
       <div className="mt-3">
         {props.loading && <LoadingState />}
         {props.holdings !== null && !props.loading && (
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-canvas p-3 text-xs text-slate-200">
+          <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-canvas p-3 text-xs text-ink">
             {props.holdings}
           </pre>
         )}

@@ -16,6 +16,21 @@
   --shadow-panel: 0 18px 45px rgb(0 0 0 / 0.28);
 }
 
+html.light {
+  --color-canvas: #f4f7fb;
+  --color-surface: #ffffff;
+  --color-surface-raised: #e7edf5;
+  --color-border: #cbd5e1;
+  --color-ink: #142033;
+  --color-muted: #52627a;
+  --color-brand: #16a34a;
+  --color-brand-strong: #15803d;
+  --color-focus: #2563eb;
+  --color-danger: #be123c;
+  --color-warning: #a16207;
+  --shadow-panel: 0 18px 45px rgb(15 23 42 / 0.12);
+}
+
 @layer base {
   html,
   body,
@@ -34,6 +49,9 @@
       "Segoe UI",
       sans-serif;
     overscroll-behavior-y: none;
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
   }
 
   button,
@@ -71,11 +89,11 @@
   }
 
   .feedback-editor a {
-    @apply text-blue-400 underline;
+    @apply text-focus underline;
   }
 
   .feedback-editor p:first-child:only-child::before {
     content: "Describe your experience and highlight important concerns…";
-    @apply pointer-events-none float-left h-0 text-slate-500;
+    @apply pointer-events-none float-left h-0 text-muted;
   }
 }

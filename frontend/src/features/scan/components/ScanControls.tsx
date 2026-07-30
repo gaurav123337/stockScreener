@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { controlClass } from "@/components/ui/styles";
 import { cn } from "@/lib/cn";
@@ -18,7 +19,7 @@ interface ScanControlsProps {
 }
 
 const chipClass =
-  "shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted hover:border-slate-500 hover:text-ink";
+  "inline-flex min-h-9 items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-xs font-semibold shadow-sm transition-colors hover:border-brand hover:text-ink";
 
 export function ScanControls(props: ScanControlsProps) {
   const {
@@ -44,14 +45,14 @@ export function ScanControls(props: ScanControlsProps) {
         value={symbols}
         onChange={(event) => onSymbolsChange(event.target.value)}
       />
-      <div className="my-3 flex gap-2 overflow-x-auto pb-1" aria-label="Predefined filters">
+      <div className="my-3 flex flex-wrap gap-2" aria-label="Predefined filters">
         <FilterChip active={!selectedFilter} label="All" onClick={() => onFilterChange("")} />
         {filters.map((filter) => (
           <FilterChip
             key={filter.name}
             active={selectedFilter === filter.name}
             label={filter.name}
-            title={filter.desc}
+            title={filter.description}
             onClick={() => onFilterChange(filter.name)}
           />
         ))}
@@ -89,11 +90,17 @@ function FilterChip(props: {
   return (
     <button
       type="button"
-      className={cn(chipClass, props.active && "border-brand bg-emerald-500/15 text-emerald-300")}
+      className={cn(
+        chipClass,
+        props.active
+          ? "border-brand bg-brand text-emerald-950 shadow-md shadow-emerald-950/20"
+          : "border-border bg-surface text-muted",
+      )}
       title={props.title}
       aria-pressed={props.active}
       onClick={props.onClick}
     >
+      {props.active && <Check aria-hidden="true" className="size-3.5 stroke-[3]" />}
       {props.label}
     </button>
   );

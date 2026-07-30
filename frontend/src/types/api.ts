@@ -79,7 +79,7 @@ export interface ScanResponse {
 
 export interface PredefinedFilter {
   name: string;
-  desc: string;
+  description: string;
 }
 
 export interface FiltersResponse {
@@ -100,8 +100,8 @@ export interface SearchResponse {
 
 /* ---------------------------------- Settings --------------------------------- */
 
-/** A settings section is a flat map of key -> number | string | string[]. */
-export type SettingsSection = Record<string, number | string | string[]>;
+/** A settings section is a flat map of editable primitive and list values. */
+export type SettingsSection = Record<string, number | string | boolean | string[]>;
 
 export interface Settings {
   scoring: SettingsSection;

@@ -123,7 +123,7 @@ export default function TrainPage() {
         <div className="mt-3">
           {knowledgeMutation.isPending && <LoadingState />}
           {knowledge !== null && !knowledgeMutation.isPending && (
-            <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-canvas p-3 text-xs text-slate-200">
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-canvas p-3 text-xs text-ink">
               {knowledge}
             </pre>
           )}

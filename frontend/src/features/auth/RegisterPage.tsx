@@ -63,7 +63,7 @@ export default function RegisterPage() {
 
         {error && (
           <div
-            className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200"
+            className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-danger"
             role="alert"
           >
             {error}
@@ -131,10 +131,10 @@ export default function RegisterPage() {
           </Button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-blue-300 [&_a]:hover:underline">
+        <p className="mt-5 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-focus [&_a]:hover:underline">
           Already have an account? <Link to="/auth/login">Sign in</Link>
         </p>
-        <p className="mt-2 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-blue-300 [&_a]:hover:underline">
+        <p className="mt-2 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-focus [&_a]:hover:underline">
           <Link to="/recommend">Continue as guest</Link>
         </p>
       </Card>

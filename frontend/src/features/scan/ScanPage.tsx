@@ -9,6 +9,7 @@ import { ScanControls } from "./components/ScanControls";
 import { ScanResultsTable } from "./components/ScanResultsTable";
 import { StockAutocomplete } from "./components/StockAutocomplete";
 import { useStockAutocomplete } from "./hooks/useStockAutocomplete";
+import { BUILT_IN_FILTERS } from "./predefinedFilters";
 
 function parseSymbols(raw: string): string[] {
   return raw.split(/[\s,]+/).filter(Boolean);
@@ -77,7 +78,9 @@ export default function ScanPage() {
         selectedFilter={selectedFilter}
         customFilter={customFilter}
         top={top}
-        filters={filtersQuery.data?.predefined ?? []}
+        filters={
+          filtersQuery.data?.predefined?.length ? filtersQuery.data.predefined : BUILT_IN_FILTERS
+        }
         isScanning={scanMutation.isPending}
         onSymbolsChange={setSymbols}
         onFilterChange={setSelectedFilter}

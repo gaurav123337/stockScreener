@@ -16,9 +16,9 @@ const HEADINGS = [
 ];
 const tableCellClass = "whitespace-nowrap border-b border-border px-3 py-2.5 text-right";
 const actionTextStyles: Record<string, string> = {
-  BUY: "font-bold text-emerald-300",
-  SELL: "font-bold text-rose-300",
-  HOLD: "font-bold text-yellow-300",
+  BUY: "font-bold text-brand",
+  SELL: "font-bold text-danger",
+  HOLD: "font-bold text-warning",
 };
 
 export function ScanResultsTable(props: {
@@ -83,8 +83,8 @@ function ScanResultRows({
     <>
       <tr
         className={cn(
-          "cursor-pointer transition-colors hover:bg-slate-800/70",
-          open && "bg-slate-800/70",
+          "cursor-pointer transition-colors hover:bg-surface-raised",
+          open && "bg-surface-raised",
         )}
         onClick={onToggle}
         onKeyDown={(event) => {
@@ -119,7 +119,7 @@ function ScanResultRows({
         <tr className="bg-canvas/50">
           <td className="border-b border-border px-4 py-3" colSpan={10}>
             {row.reasons?.length ? (
-              <ul className="list-disc space-y-1 pl-5 text-sm text-slate-200">
+              <ul className="list-disc space-y-1 pl-5 text-sm text-ink">
                 {row.reasons.map((reason) => (
                   <li key={reason}>{reason}</li>
                 ))}

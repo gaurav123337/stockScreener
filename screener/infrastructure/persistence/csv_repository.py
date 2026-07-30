@@ -139,9 +139,12 @@ class MarkdownKnowledgeStore(KnowledgeStore):
             f.write("\n".join(lines) + "\n")
 
     def get_content(self) -> str:
-        if not self._kb_file.exists():
+        try:
+            return self._kb_file.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            # A new or ephemeral deployment may not have learned anything yet.
+            # Missing knowledge is a valid empty state, not an API failure.
             return ""
-        return self._kb_file.read_text(encoding="utf-8")
 
     def has_ingested(self, source_hash: str) -> bool:
         return source_hash in self._load_manifest().values()

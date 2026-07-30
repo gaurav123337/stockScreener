@@ -15,6 +15,7 @@ from screener.core.models import Action, Recommendation
 from screener.services.analysis_service import AnalysisService
 from screener.services.filter_service import FilterService, PredefinedFilter
 from screener.services.scoring_engine import ScoringEngine
+from screener.infrastructure.persistence.csv_repository import MarkdownKnowledgeStore
 
 
 class MockDataProvider(MarketDataProvider):
@@ -100,6 +101,20 @@ def test_filters():
     print("  Pre-defined + custom filters OK")
 
 
+def test_missing_knowledge_base_is_empty(tmp_path=None):
+    """A fresh deployment can view an empty knowledge base without a 500."""
+    import tempfile
+
+    if tmp_path is None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = MarkdownKnowledgeStore(root / "missing.md", root / "manifest.json")
+            assert store.get_content() == ""
+    else:
+        store = MarkdownKnowledgeStore(tmp_path / "missing.md", tmp_path / "manifest.json")
+        assert store.get_content() == ""
+
+
 def test_scoring_engine_pluggable():
     """Verify that custom scorers can be registered and used."""
     from screener.core.interfaces import ScoringStrategy
@@ -130,5 +145,6 @@ if __name__ == "__main__":
     test_buy_on_uptrend()
     test_sell_on_downtrend()
     test_filters()
+    test_missing_knowledge_base_is_empty()
     test_scoring_engine_pluggable()
     print("ALL OFFLINE TESTS PASSED")
