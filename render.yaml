@@ -12,6 +12,6 @@ services:
       - key: SCREENER_FEEDBACK_EMAIL_TO
         value: garudagaura@gmail.com
       - key: SCREENER_FEEDBACK_EMAIL_FROM
-        sync: false
+        value: onboarding@resend.dev
       - key: RESEND_API_KEY
         sync: false
