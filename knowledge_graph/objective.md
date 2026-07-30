@@ -20,3 +20,9 @@ It provides the appropriate message.
 30-Jul-2026-Feature:-
 Now I want to create a feedback form, so that test users can provide me feedback.
 And that feedback must use Rich text editor so that user user can highlight their concerns and also it supports the emoji.
+
+Now act as business analyst ans create a plan for product owner to catch all the user in one dashboard. And he can also configure the common values for every user.
+And also configure the other variables used in application.
+And feeback form description is ovelapping the text which user types.
+And check the sign up/sign in and forget password functionality.
+Use email for account creation.

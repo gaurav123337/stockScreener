@@ -10,8 +10,13 @@ export type Action = "BUY" | "SELL" | "HOLD";
 export interface UserProfile {
   user_id: string;
   username: string;
+  email: string | null;
   display_name: string | null;
+  role: "user" | "product_owner";
+  status: "active" | "suspended";
+  email_verified_at: string | null;
   created_at: string;
+  last_login_at: string | null;
   preferences: Record<string, unknown>;
 }
 
@@ -40,6 +45,108 @@ export interface FeedbackReceipt {
   feedback_id: string;
   created_at: string;
   message: string;
+}
+
+export interface AdminFeedback {
+  feedback_id: string;
+  user_id: string;
+  username: string;
+  category: FeedbackCategory;
+  title: string;
+  plain_text: string;
+  status: "new" | "triaged" | "planned" | "in_progress" | "resolved" | "closed";
+  priority: "low" | "medium" | "high" | "critical";
+  assignee_id: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+}
+
+export interface FeedbackEvent {
+  event_id: string;
+  feedback_id: string;
+  actor_id: string;
+  event_type: string;
+  changes: Record<string, unknown>;
+  note: string | null;
+  reason: string;
+  created_at: string;
+}
+
+export interface AdminFeedbackDetail {
+  feedback: AdminFeedback;
+  events: FeedbackEvent[];
+}
+
+export type AdminUser = UserProfile;
+
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface AdminOverview {
+  users: {
+    total: number;
+    verified: number;
+    active: number;
+    new_7d: number;
+    new_30d: number;
+    by_status: Record<"active" | "suspended", number>;
+    by_verification: Record<"verified" | "pending", number>;
+  };
+  feedback: {
+    total: number;
+    guest: number;
+    open: number;
+    critical: number;
+    overdue: number;
+    by_status: Record<string, number>;
+    by_category: Record<FeedbackCategory, number>;
+    by_priority: Record<string, number>;
+    by_age: Record<"under_7d" | "7_to_30d" | "over_30d", number>;
+  };
+  recent_users: AdminUser[];
+  recent_feedback: AdminFeedback[];
+  recent_config_publications: ConfigPublication[];
+}
+
+export interface ConfigPublication {
+  version: number;
+  values: Settings;
+  policies: Record<string, string>;
+  actor_id?: string;
+  reason?: string;
+  created_at?: string;
+}
+
+export interface ConfigDiff {
+  from_version: number;
+  changes: Array<{ key: string; before: unknown; after: unknown }>;
+  values: Settings;
+}
+
+export interface ConfigRegistryItem {
+  key: string;
+  section: string;
+  label: string;
+  type: string;
+  default: unknown;
+  sensitive: boolean;
+  user_overridable: boolean;
+}
+
+export interface AuditEvent {
+  event_id: string;
+  actor_id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  reason: string;
+  changes: Record<string, unknown>;
+  created_at: string;
 }
 
 /** Row shape returned by /api/recommend/{symbol} and inside /api/scan results. */

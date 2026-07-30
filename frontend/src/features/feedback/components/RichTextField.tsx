@@ -14,6 +14,7 @@ interface RichTextFieldProps {
 }
 
 export function RichTextField(props: RichTextFieldProps) {
+  const empty = !props.editor || props.editor.isEmpty;
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
@@ -32,7 +33,12 @@ export function RichTextField(props: RichTextFieldProps) {
         onCloseEmoji={props.onCloseEmoji}
         onError={props.onError}
       />
-      <div className="min-h-56 rounded-b-panel border border-border bg-surface-raised transition focus-within:border-focus focus-within:ring-1 focus-within:ring-focus">
+      <div className="relative min-h-56 rounded-b-panel border border-border bg-surface-raised transition focus-within:border-focus focus-within:ring-1 focus-within:ring-focus">
+        {empty && (
+          <span className="pointer-events-none absolute left-4 top-3.5 text-sm text-muted">
+            Describe what you expected and what happened
+          </span>
+        )}
         <EditorContent editor={props.editor} />
       </div>
       <p id="feedback-details-help" className={cn(helpTextClass, "mt-2")}>

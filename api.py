@@ -27,7 +27,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from screener.bootstrap import bootstrap, get_service
 from screener.core.config import config
-from screener.core.feedback_models import FeedbackSubmission
+from screener.core.feedback_models import FeedbackSubmission, FeedbackWorkflowUpdate
 from screener.core.interfaces import MarketDataProvider
 from screener.core.responses import (
     ApiError,
@@ -43,6 +43,7 @@ from screener.services import (
     AnalysisService,
     AuthService,
     BrokerService,
+    ControlCenterService,
     FeedbackService,
     FilterService,
     KnowledgeService,
@@ -69,6 +70,9 @@ async def lifespan(app: FastAPI):
     """Startup: ensure guest user exists. Shutdown: cleanup."""
     auth = get_service(AuthService)
     auth.ensure_guest_user()
+    control_center = get_service(ControlCenterService)
+    control_center.load_active_config()
+    control_center.bootstrap_product_owner()
     yield
 
 
@@ -198,6 +202,13 @@ async def require_auth(
     return auth.get_user_from_token(token)
 
 
+async def require_product_owner(user: UserProfile = Depends(require_auth)) -> UserProfile:
+    if user.role != "product_owner":
+        from screener.core.responses import ForbiddenError
+        raise ForbiddenError("Product-owner access is required")
+    return user
+
+
 # --------------------------------------------------------------------------- #
 # Request models
 # --------------------------------------------------------------------------- #
@@ -234,6 +245,40 @@ class FeedbackBody(FeedbackSubmission):
     """Rich-text feedback payload from a test user."""
 
 
+class AccountStatusBody(BaseModel):
+    status: str
+    reason: str = Field(..., min_length=3, max_length=500)
+
+
+class ReasonBody(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+
+
+class ConfigPublicationBody(BaseModel):
+    patch: dict[str, Any]
+    policies: dict[str, str] = Field(default_factory=dict)
+    reason: str = Field(..., min_length=3, max_length=500)
+    expected_version: int | None = Field(None, ge=0)
+
+
+class RollbackBody(BaseModel):
+    version: int = Field(..., ge=1)
+    reason: str = Field(..., min_length=3, max_length=500)
+
+
+class TokenBody(BaseModel):
+    token: str = Field(..., min_length=20, max_length=256)
+
+
+class EmailBody(BaseModel):
+    email: str = Field(..., min_length=5, max_length=254)
+
+
+class PasswordResetBody(TokenBody):
+    password: str = Field(..., min_length=8, max_length=128)
+    password_confirmation: str = Field(..., min_length=8, max_length=128)
+
+
 # --------------------------------------------------------------------------- #
 # Auth APIs
 # --------------------------------------------------------------------------- #
@@ -261,9 +306,147 @@ def get_me(user: UserProfile = Depends(get_current_user)):
 
 
 @app.post("/api/auth/logout")
-def logout(user: UserProfile = Depends(get_current_user)):
+def logout(user: UserProfile = Depends(require_auth)):
     """Log out (client-side token removal; server is stateless)."""
     return {"message": "Logged out successfully"}
+
+
+@app.post("/api/auth/logout-all")
+def logout_all(user: UserProfile = Depends(require_auth)):
+    return get_service(AuthService).logout_all(user.user_id)
+
+
+@app.post("/api/auth/verify-email")
+def verify_email(body: TokenBody):
+    return get_service(AuthService).verify_email(body.token).model_dump(mode="json")
+
+
+@app.post("/api/auth/resend-verification")
+def resend_verification(user: UserProfile = Depends(require_auth)):
+    return get_service(AuthService).resend_verification(user.user_id)
+
+
+@app.post("/api/auth/forgot-password")
+def forgot_password(body: EmailBody):
+    return get_service(AuthService).request_password_reset(body.email)
+
+
+@app.post("/api/auth/reset-password")
+def reset_password(body: PasswordResetBody):
+    return get_service(AuthService).reset_password(
+        body.token, body.password, body.password_confirmation
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Product owner control center APIs
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/admin/overview")
+def admin_overview(user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).dashboard()
+
+
+@app.get("/api/admin/users")
+def admin_users(search: str = "", role: str | None = None, status: str | None = None,
+                verified: bool | None = None,
+                registered_within_days: int | None = None,
+                page: int = 1, page_size: int = 25,
+                user: UserProfile = Depends(require_product_owner)):
+    within = registered_within_days if registered_within_days in {7, 30} else None
+    return get_service(ControlCenterService).list_users(
+        search=search, role=role, status=status, verified=verified,
+        registered_within_days=within, page=max(page, 1), page_size=min(max(page_size, 1), 100)
+    )
+
+
+@app.get("/api/admin/users/{user_id}")
+def admin_user_detail(user_id: str, user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).user_detail(user_id)
+
+
+@app.post("/api/admin/users/{user_id}/status")
+def admin_user_status(user_id: str, body: AccountStatusBody,
+                      user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).set_user_status(user_id, body.status, user.user_id, body.reason)
+
+
+@app.post("/api/admin/users/{user_id}/password-reset")
+def admin_user_password_reset(user_id: str, body: ReasonBody,
+                              user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).send_password_reset(
+        user_id, user.user_id, body.reason, get_service(AuthService)
+    )
+
+
+@app.get("/api/admin/feedback")
+def admin_feedback(search: str = "", status: str | None = None, priority: str | None = None,
+                   category: str | None = None, user_id: str | None = None, assignee_id: str | None = None,
+                   age: str | None = None,
+                   page: int = 1, page_size: int = 25,
+                   user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).list_feedback(
+        search=search, status=status, priority=priority, category=category,
+        user_id=user_id, assignee_id=assignee_id, age=age,
+        page=max(page, 1), page_size=min(max(page_size, 1), 100)
+    )
+
+
+@app.get("/api/admin/feedback/{feedback_id}")
+def admin_feedback_detail(feedback_id: str, user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).feedback_detail(feedback_id)
+
+
+@app.post("/api/admin/feedback/{feedback_id}")
+def admin_feedback_update(feedback_id: str, body: FeedbackWorkflowUpdate,
+                          user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).update_feedback(feedback_id, body, user.user_id)
+
+
+@app.get("/api/admin/config/registry")
+def admin_config_registry(user: UserProfile = Depends(require_product_owner)):
+    return {"items": get_service(ControlCenterService).registry()}
+
+
+@app.get("/api/admin/config/current")
+def admin_config_current(user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).current_config()
+
+
+@app.post("/api/admin/config/validate")
+def admin_config_validate(body: SettingsBody, user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).validate_config(body.patch)
+
+
+@app.post("/api/admin/config/diff")
+def admin_config_diff(body: SettingsBody, user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).config_diff(body.patch)
+
+
+@app.get("/api/admin/config/history")
+def admin_config_history(user: UserProfile = Depends(require_product_owner)):
+    return {"items": get_service(ControlCenterService).config_history()}
+
+
+@app.post("/api/admin/config/publish")
+def admin_config_publish(body: ConfigPublicationBody, user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).publish_config(
+        body.patch, body.policies, user.user_id, body.reason, body.expected_version
+    )
+
+
+@app.post("/api/admin/config/rollback")
+def admin_config_rollback(body: RollbackBody, user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).rollback_config(body.version, user.user_id, body.reason)
+
+
+@app.get("/api/admin/audit")
+def admin_audit(action: str | None = None, target_type: str | None = None,
+                page: int = 1, page_size: int = 25,
+                user: UserProfile = Depends(require_product_owner)):
+    return get_service(ControlCenterService).audit_event_page(
+        action, target_type, max(page, 1), min(max(page_size, 1), 100)
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -320,6 +503,7 @@ def submit_feedback(
         FeedbackSubmission.model_validate(body.model_dump()),
         user_id=user.user_id,
         username=user.username,
+        reporter_email=user.email,
     )
     return {
         "feedback_id": record.feedback_id,

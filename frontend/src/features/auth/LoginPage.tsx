@@ -11,7 +11,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -19,15 +19,15 @@ export default function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (!username.trim() || !password) {
-      setError("Please enter both username and password");
+    if (!email.trim() || !password) {
+      setError("Please enter both email and password");
       return;
     }
     setLoading(true);
     try {
-      await login(username.trim(), password);
+      const profile = await login(email.trim(), password);
       toast("Logged in successfully!");
-      navigate("/recommend", { replace: true });
+      navigate(profile.role === "product_owner" ? "/control-center" : "/recommend", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -55,16 +55,16 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} className="mt-5 grid gap-4">
-          <label className={labelClass} htmlFor="login-username">
-            Username
+          <label className={labelClass} htmlFor="login-email">
+            Email
             <input
-              id="login-username"
+              id="login-email"
               className={controlClass}
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
-              autoComplete="username"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
               disabled={loading}
             />
           </label>
@@ -83,6 +83,7 @@ export default function LoginPage() {
             />
           </label>
 
+          <div className="text-right"><Link className="text-sm font-semibold text-focus hover:underline" to="/auth/forgot-password">Forgot password?</Link></div>
           <Button type="submit" disabled={loading}>
             {loading ? "Signing in…" : "Sign In"}
           </Button>

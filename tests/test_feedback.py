@@ -4,9 +4,11 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from screener.core.feedback_models import FeedbackSubmission
 from screener.core.responses import ValidationError
+from screener.infrastructure.notifications import SMTPFeedbackNotifier
 from screener.infrastructure.persistence.feedback_store import FeedbackStore
 from screener.services.feedback_service import FeedbackService
 
@@ -122,6 +124,69 @@ class FeedbackServiceTests(unittest.TestCase):
 
         with self.assertRaises(ValidationError):
             self.service.submit(submission, user_id="tenant-a", username="tester-a")
+
+    def test_notifies_product_owner_after_feedback_is_persisted(self):
+        notifier = MagicMock()
+        service = FeedbackService(self.store, notifier=notifier)
+
+        record = service.submit(
+            self.submission(),
+            user_id="tenant-a",
+            username="tester-a",
+            reporter_email="tester@example.com",
+        )
+
+        notifier.notify.assert_called_once_with(record, "tester@example.com")
+        self.assertEqual(len(self.store.list_by_user("tenant-a")), 1)
+
+    def test_notification_failure_does_not_lose_persisted_feedback(self):
+        notifier = MagicMock()
+        notifier.notify.side_effect = RuntimeError("SMTP unavailable")
+        service = FeedbackService(self.store, notifier=notifier)
+
+        with self.assertLogs("screener.services.feedback_service", level="ERROR"):
+            record = service.submit(
+                self.submission(), user_id="tenant-a", username="tester-a"
+            )
+
+        self.assertEqual(
+            self.store.list_by_user("tenant-a")[0].feedback_id, record.feedback_id
+        )
+
+
+class SMTPFeedbackNotifierTests(unittest.TestCase):
+    @patch("screener.infrastructure.notifications.smtp_feedback_notifier.smtplib.SMTP")
+    def test_sends_feedback_to_configured_product_owner(self, smtp_type):
+        smtp = smtp_type.return_value.__enter__.return_value
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service_record = FeedbackService(
+                FeedbackStore(Path(temp_dir) / "feedback.db")
+            ).submit(
+                FeedbackServiceTests.submission(),
+                user_id="tenant-a",
+                username="tester-a",
+            )
+            notifier = SMTPFeedbackNotifier(
+                host="smtp.example.com",
+                username="sender@example.com",
+                password="secret",
+            )
+
+            notifier.notify(service_record, "tester@example.com")
+
+            smtp_type.assert_called_once_with("smtp.example.com", 587, timeout=10.0)
+            smtp.starttls.assert_called_once_with()
+            smtp.login.assert_called_once_with("sender@example.com", "secret")
+            message = smtp.send_message.call_args.args[0]
+            self.assertEqual(message["To"], "garudagaura@gmail.com")
+            self.assertEqual(message["Reply-To"], "tester@example.com")
+            self.assertIn(service_record.feedback_id, message.get_content())
+
+    @patch.dict("os.environ", {"SCREENER_SMTP_PORT": "invalid"})
+    def test_invalid_environment_port_falls_back_to_standard_submission_port(self):
+        notifier = SMTPFeedbackNotifier.from_environment()
+
+        self.assertEqual(notifier._port, 587)
 
 
 if __name__ == "__main__":

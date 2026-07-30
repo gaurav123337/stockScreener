@@ -15,6 +15,13 @@ data/predictions.csv
 data/users.db
 data/users.db-shm
 data/users.db-wal
+data/feedback.db
+data/feedback.db-shm
+data/feedback.db-wal
+data/control_center.db
+data/control_center.db-shm
+data/control_center.db-wal
+data/auth_email_outbox.jsonl
 data/user_config.json
 
 # Learned knowledge manifest (local state)
