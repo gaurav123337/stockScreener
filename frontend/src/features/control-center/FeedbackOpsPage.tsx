@@ -4,23 +4,31 @@ import { Card } from "@/components/ui/Card";
 import { controlClass } from "@/components/ui/styles";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Badge, PageHeader, QueryState } from "./shared";
 import { formatDate, tableClass } from "./table-utils";
 
 export default function FeedbackOpsPage() {
-  const [status, setStatus] = useState("");
+  const [routeParams] = useSearchParams();
+  const [status, setStatus] = useState(() => routeParams.get("status") ?? "");
   const [search, setSearch] = useState("");
-  const [priority, setPriority] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [priority, setPriority] = useState(() => routeParams.get("priority") ?? "");
+  const category = routeParams.get("category") ?? "";
+  const userId = routeParams.get("user_id") ?? "";
+  const age = routeParams.get("age") ?? "";
+  const [selectedId, setSelectedId] = useState<string | null>(() => routeParams.get("feedback_id"));
   const { toast } = useToast();
   const client = useQueryClient();
   const query = useQuery({
-    queryKey: ["admin", "feedback", status, priority, search],
+    queryKey: ["admin", "feedback", status, priority, search, category, userId, age],
     queryFn: () => {
       const params = new URLSearchParams();
       if (status) params.set("status", status);
       if (priority) params.set("priority", priority);
       if (search) params.set("search", search);
+      if (category) params.set("category", category);
+      if (userId) params.set("user_id", userId);
+      if (age) params.set("age", age);
       return api.adminFeedback(params.toString());
     },
   });
@@ -52,6 +60,7 @@ export default function FeedbackOpsPage() {
         <input className={controlClass} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search feedback or reporter" />
         <select className={controlClass} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
+          {status === "open" && <option value="open">Open</option>}
           {["new", "triaged", "planned", "in_progress", "resolved", "closed"].map((item) => <option key={item}>{item}</option>)}
         </select>
         <select className={controlClass} value={priority} onChange={(e) => setPriority(e.target.value)}>

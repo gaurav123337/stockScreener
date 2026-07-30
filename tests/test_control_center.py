@@ -6,7 +6,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -137,6 +137,59 @@ class ControlCenterSecurityTests(unittest.TestCase):
         )
         self.assertIsNone(reopened["resolved_at"])
         self.assertEqual(2, len(self.control.feedback_detail(feedback.feedback_id)["events"]))
+
+    def test_dashboard_reports_breakdowns_recency_and_drill_down_filters(self):
+        recent = self.register("recent@example.com").user
+        older = self.register("older@example.com").user
+        now = datetime.now(timezone.utc)
+        self.users.update_account(recent.user_id, email_verified_at=now)
+        with self.users._connection() as conn:
+            conn.execute(
+                "UPDATE users SET created_at = ? WHERE user_id = ?",
+                ((now - timedelta(days=20)).isoformat(), older.user_id),
+            )
+
+        current = FeedbackRecord(
+            feedback_id="recent-feedback", user_id="guest", username="Guest", category="idea",
+            title="Recent idea", document={"type": "doc", "content": []},
+            plain_text="A recent product suggestion", created_at=now - timedelta(days=1),
+            priority="critical",
+        )
+        overdue = FeedbackRecord(
+            feedback_id="overdue-feedback", user_id=older.user_id, username="Older", category="bug",
+            title="Overdue bug", document={"type": "doc", "content": []},
+            plain_text="An unresolved old product bug", created_at=now - timedelta(days=10),
+            status="triaged",
+        )
+        resolved = FeedbackRecord(
+            feedback_id="resolved-feedback", user_id=recent.user_id, username="Recent", category="concern",
+            title="Resolved concern", document={"type": "doc", "content": []},
+            plain_text="An old but resolved concern", created_at=now - timedelta(days=40),
+            status="resolved",
+        )
+        for item in (overdue, resolved, current):
+            self.control._feedback.create(item)
+
+        values = config.editable_snapshot()
+        publication = self.control.publish_config(values, {}, "owner-id", "dashboard publication")
+        dashboard = self.control.dashboard()
+
+        self.assertEqual(2, dashboard["users"]["total"])
+        self.assertEqual(1, dashboard["users"]["new_7d"])
+        self.assertEqual(2, dashboard["users"]["new_30d"])
+        self.assertEqual({"verified": 1, "pending": 1}, dashboard["users"]["by_verification"])
+        self.assertEqual(2, dashboard["feedback"]["open"])
+        self.assertEqual(1, dashboard["feedback"]["overdue"])
+        self.assertEqual(1, dashboard["feedback"]["guest"])
+        self.assertEqual(1, dashboard["feedback"]["by_age"]["over_30d"])
+        self.assertEqual("recent-feedback", dashboard["recent_feedback"][0]["feedback_id"])
+        self.assertEqual(publication["version"], dashboard["recent_config_publications"][0]["version"])
+
+        self.assertEqual(1, self.control.list_users(verified=True)["total"])
+        self.assertEqual(2, self.control.list_users(registered_within_days=30)["total"])
+        self.assertEqual(2, self.control.list_feedback(status="open")["total"])
+        self.assertEqual(1, self.control.list_feedback(age="overdue")["total"])
+        self.assertEqual(1, self.control.list_feedback(user_id="guest")["total"])
 
     def test_config_diff_history_and_optimistic_concurrency(self):
         values = config.editable_snapshot()

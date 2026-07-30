@@ -88,10 +88,29 @@ export interface Paginated<T> {
 }
 
 export interface AdminOverview {
-  users: { total: number; verified: number; active: number; new_7d: number };
-  feedback: { total: number; open: number; critical: number };
+  users: {
+    total: number;
+    verified: number;
+    active: number;
+    new_7d: number;
+    new_30d: number;
+    by_status: Record<"active" | "suspended", number>;
+    by_verification: Record<"verified" | "pending", number>;
+  };
+  feedback: {
+    total: number;
+    guest: number;
+    open: number;
+    critical: number;
+    overdue: number;
+    by_status: Record<string, number>;
+    by_category: Record<FeedbackCategory, number>;
+    by_priority: Record<string, number>;
+    by_age: Record<"under_7d" | "7_to_30d" | "over_30d", number>;
+  };
   recent_users: AdminUser[];
   recent_feedback: AdminFeedback[];
+  recent_config_publications: ConfigPublication[];
 }
 
 export interface ConfigPublication {

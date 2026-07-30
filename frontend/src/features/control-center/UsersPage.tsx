@@ -5,21 +5,27 @@ import { Card } from "@/components/ui/Card";
 import { controlClass } from "@/components/ui/styles";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Badge, PageHeader, QueryState } from "./shared";
 import { formatDate, tableClass } from "./table-utils";
 
 export default function UsersPage() {
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [role, setRole] = useState("");
+  const [routeParams] = useSearchParams();
+  const [search, setSearch] = useState(() => routeParams.get("search") ?? "");
+  const [status, setStatus] = useState(() => routeParams.get("status") ?? "");
+  const [role, setRole] = useState(() => routeParams.get("role") ?? "");
+  const [verified, setVerified] = useState(() => routeParams.get("verified") ?? "");
+  const registeredWithinDays = routeParams.get("registered_within_days") ?? "";
   const { toast } = useToast();
   const client = useQueryClient();
   const params = new URLSearchParams();
   if (search) params.set("search", search);
   if (status) params.set("status", status);
   if (role) params.set("role", role);
+  if (verified) params.set("verified", verified);
+  if (registeredWithinDays) params.set("registered_within_days", registeredWithinDays);
   const query = useQuery({
-    queryKey: ["admin", "users", search, status, role],
+    queryKey: ["admin", "users", search, status, role, verified, registeredWithinDays],
     queryFn: () => api.adminUsers(params.toString()),
   });
   const resetMutation = useMutation({
@@ -54,7 +60,7 @@ export default function UsersPage() {
         description="Search accounts, review verification state, and control access."
         actions={<div className="text-sm text-muted">{query.data?.total ?? 0} accounts</div>}
       />
-      <div className="mb-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_12rem]">
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem]">
         <input
           className={controlClass}
           value={search}
@@ -70,6 +76,11 @@ export default function UsersPage() {
           <option value="">All roles</option>
           <option value="user">User</option>
           <option value="product_owner">Product owner</option>
+        </select>
+        <select className={controlClass} value={verified} onChange={(e) => setVerified(e.target.value)}>
+          <option value="">All verification states</option>
+          <option value="true">Verified</option>
+          <option value="false">Pending</option>
         </select>
       </div>
       <QueryState loading={query.isLoading} error={query.error}>

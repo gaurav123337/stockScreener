@@ -349,9 +349,15 @@ def admin_overview(user: UserProfile = Depends(require_product_owner)):
 
 @app.get("/api/admin/users")
 def admin_users(search: str = "", role: str | None = None, status: str | None = None,
+                verified: bool | None = None,
+                registered_within_days: int | None = None,
                 page: int = 1, page_size: int = 25,
                 user: UserProfile = Depends(require_product_owner)):
-    return get_service(ControlCenterService).list_users(search, role, status, max(page, 1), min(max(page_size, 1), 100))
+    within = registered_within_days if registered_within_days in {7, 30} else None
+    return get_service(ControlCenterService).list_users(
+        search=search, role=role, status=status, verified=verified,
+        registered_within_days=within, page=max(page, 1), page_size=min(max(page_size, 1), 100)
+    )
 
 
 @app.get("/api/admin/users/{user_id}")
@@ -376,11 +382,13 @@ def admin_user_password_reset(user_id: str, body: ReasonBody,
 @app.get("/api/admin/feedback")
 def admin_feedback(search: str = "", status: str | None = None, priority: str | None = None,
                    category: str | None = None, user_id: str | None = None, assignee_id: str | None = None,
+                   age: str | None = None,
                    page: int = 1, page_size: int = 25,
                    user: UserProfile = Depends(require_product_owner)):
     return get_service(ControlCenterService).list_feedback(
-        search, status, priority, category, user_id, assignee_id,
-        max(page, 1), min(max(page_size, 1), 100)
+        search=search, status=status, priority=priority, category=category,
+        user_id=user_id, assignee_id=assignee_id, age=age,
+        page=max(page, 1), page_size=min(max(page_size, 1), 100)
     )
 
 

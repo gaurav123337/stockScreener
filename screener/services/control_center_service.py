@@ -160,18 +160,51 @@ class ControlCenterService:
     def dashboard(self) -> dict[str, Any]:
         users = [user for user in self._users.list_users() if user.user_id != "guest"]
         feedback = self._feedback.list_all()
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
+        now = datetime.now(timezone.utc)
+        cutoff_7d = now - timedelta(days=7)
+        cutoff_30d = now - timedelta(days=30)
+
+        def utc(timestamp: datetime) -> datetime:
+            return timestamp if timestamp.tzinfo else timestamp.replace(tzinfo=timezone.utc)
+
+        def age_days(created_at: datetime) -> float:
+            return max(0, (now - utc(created_at)).total_seconds() / 86400)
+
+        statuses = ("new", "triaged", "planned", "in_progress", "resolved", "closed")
+        categories = ("bug", "concern", "idea", "other")
+        priorities = ("low", "medium", "high", "critical")
+        ages = {"under_7d": 0, "7_to_30d": 0, "over_30d": 0}
+        for item in feedback:
+            age = age_days(item.created_at)
+            ages["under_7d" if age < 7 else "7_to_30d" if age < 30 else "over_30d"] += 1
         return {
             "users": {"total": len(users), "verified": sum(user.email_verified_at is not None for user in users),
                       "active": sum(user.status == "active" for user in users),
-                      "new_7d": sum(user.created_at >= cutoff for user in users)},
-            "feedback": {"total": len(feedback), "open": sum(item.status not in {"resolved", "closed"} for item in feedback),
-                         "critical": sum(item.priority == "critical" for item in feedback)},
-            "recent_users": [self._user_dto(user) for user in sorted(users, key=lambda item: item.created_at, reverse=True)[:5]],
-            "recent_feedback": [item.model_dump(mode="json") for item in feedback[:5]],
+                       "new_7d": sum(utc(user.created_at) >= cutoff_7d for user in users),
+                       "new_30d": sum(utc(user.created_at) >= cutoff_30d for user in users),
+                       "by_status": {status: sum(user.status == status for user in users) for status in ("active", "suspended")},
+                       "by_verification": {"verified": sum(user.email_verified_at is not None for user in users),
+                                           "pending": sum(user.email_verified_at is None for user in users)}},
+            "feedback": {"total": len(feedback), "guest": sum(item.user_id == "guest" for item in feedback),
+                         "open": sum(item.status not in {"resolved", "closed"} for item in feedback),
+                         "critical": sum(item.priority == "critical" for item in feedback),
+                         "overdue": sum(item.status not in {"resolved", "closed"} and age_days(item.created_at) >= 7 for item in feedback),
+                         "by_status": {status: sum(item.status == status for item in feedback) for status in statuses},
+                         "by_category": {category: sum(item.category == category for item in feedback) for category in categories},
+                         "by_priority": {priority: sum(item.priority == priority for item in feedback) for priority in priorities},
+                         "by_age": ages},
+            "recent_users": [self._user_dto(user) for user in sorted(
+                users, key=lambda item: utc(item.created_at), reverse=True
+            )[:5]],
+            "recent_feedback": [item.model_dump(mode="json") for item in sorted(
+                feedback, key=lambda item: utc(item.created_at), reverse=True
+            )[:5]],
+            "recent_config_publications": self._store.config_history()[:5],
         }
 
-    def list_users(self, search: str = "", role: str | None = None, status: str | None = None, page: int = 1, page_size: int = 25) -> dict[str, Any]:
+    def list_users(self, search: str = "", role: str | None = None, status: str | None = None,
+                   verified: bool | None = None, registered_within_days: int | None = None,
+                   page: int = 1, page_size: int = 25) -> dict[str, Any]:
         needle = search.strip().lower()
         items = [user for user in self._users.list_users() if user.user_id != "guest"]
         if needle:
@@ -180,6 +213,11 @@ class ControlCenterService:
             items = [user for user in items if user.role == role]
         if status:
             items = [user for user in items if user.status == status]
+        if verified is not None:
+            items = [user for user in items if (user.email_verified_at is not None) == verified]
+        if registered_within_days is not None:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=registered_within_days)
+            items = [user for user in items if (user.created_at if user.created_at.tzinfo else user.created_at.replace(tzinfo=timezone.utc)) >= cutoff]
         start = (page - 1) * page_size
         return {"items": [self._user_dto(user) for user in items[start:start + page_size]], "total": len(items), "page": page, "page_size": page_size}
 
@@ -212,12 +250,15 @@ class ControlCenterService:
 
     def list_feedback(self, search: str = "", status: str | None = None, priority: str | None = None,
                       category: str | None = None, user_id: str | None = None,
-                      assignee_id: str | None = None, page: int = 1, page_size: int = 25) -> dict[str, Any]:
+                      assignee_id: str | None = None, age: str | None = None,
+                      page: int = 1, page_size: int = 25) -> dict[str, Any]:
         needle = search.strip().lower()
         items = self._feedback.list_all()
         if needle:
             items = [item for item in items if needle in f"{item.title} {item.plain_text} {item.username}".lower()]
-        if status:
+        if status == "open":
+            items = [item for item in items if item.status not in {"resolved", "closed"}]
+        elif status:
             items = [item for item in items if item.status == status]
         if priority:
             items = [item for item in items if item.priority == priority]
@@ -227,6 +268,19 @@ class ControlCenterService:
             items = [item for item in items if item.user_id == user_id]
         if assignee_id:
             items = [item for item in items if item.assignee_id == assignee_id]
+        if age:
+            now = datetime.now(timezone.utc)
+            def days_old(item: Any) -> float:
+                created_at = item.created_at if item.created_at.tzinfo else item.created_at.replace(tzinfo=timezone.utc)
+                return max(0, (now - created_at).total_seconds() / 86400)
+            if age == "under_7d":
+                items = [item for item in items if days_old(item) < 7]
+            elif age == "7_to_30d":
+                items = [item for item in items if 7 <= days_old(item) < 30]
+            elif age == "over_30d":
+                items = [item for item in items if days_old(item) >= 30]
+            elif age == "overdue":
+                items = [item for item in items if item.status not in {"resolved", "closed"} and days_old(item) >= 7]
         start = (page - 1) * page_size
         return {"items": [item.model_dump(mode="json") for item in items[start:start + page_size]], "total": len(items), "page": page, "page_size": page_size}
 
