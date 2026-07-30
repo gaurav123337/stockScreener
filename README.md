@@ -7,6 +7,8 @@ loop. Available both as a **mobile-installable web app (PWA)** and a **CLI**.
 
 > ⚠️ Educational tool. **Not SEBI-registered investment advice.** Do your own research.
 
+For a free, disposable early-testing deployment, follow [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ---
 
 ## 🏗️ Architecture (v0.3.0)

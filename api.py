@@ -145,6 +145,12 @@ async def generic_exception_handler(request: Request, exc: Exception):
 # Auth dependency — extract & validate Bearer token
 # --------------------------------------------------------------------------- #
 
+@app.get("/api/health", include_in_schema=False)
+def health():
+    """Cheap readiness probe for deployment platforms."""
+    return {"status": "ok", "version": app.version}
+
+
 async def get_current_user(
     authorization: str | None = Header(None),
 ) -> UserProfile:

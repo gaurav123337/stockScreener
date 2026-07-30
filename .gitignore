@@ -13,6 +13,9 @@ data/.secret_key
 # Runtime data / logs
 data/predictions.csv
 data/users.db
+data/users.db-shm
+data/users.db-wal
+data/user_config.json
 
 # Learned knowledge manifest (local state)
 knowledge_graph/.learn_manifest.json
@@ -21,3 +24,6 @@ knowledge_graph/.learn_manifest.json
 .DS_Store
 Thumbs.db
 *.log
+
+# Frontend build output
+frontend/dist/

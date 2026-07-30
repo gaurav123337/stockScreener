@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: stockscreener-preview
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: SCREENER_ENVIRONMENT
+        value: production
