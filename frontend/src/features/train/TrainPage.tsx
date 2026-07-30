@@ -1,9 +1,13 @@
-import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { useToast } from "@/app/useToast";
 import { Section } from "@/components/Section";
+import { Button } from "@/components/ui/Button";
+import { Card, CardTitle } from "@/components/ui/Card";
+import { LoadingState } from "@/components/ui/Spinner";
+import { controlClass, helpTextClass } from "@/components/ui/styles";
 import type { LearnResult } from "@/types/api";
+import { useMutation } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 
 function learnMessage(result: LearnResult): string {
   if (result.ok === false) return result.error ?? "failed";
@@ -67,74 +71,64 @@ export default function TrainPage() {
         sub="Keep the screener updated — upload PDFs, notes/blogs, video transcripts, or paste a URL. It extracts market rules into its knowledge base."
       />
 
-      <div className="card">
-        <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 8 }}>Upload a file</div>
-        <div className="mini" style={{ marginBottom: 8 }}>
+      <Card>
+        <CardTitle className="mb-2">Upload a file</CardTitle>
+        <p className={helpTextClass}>
           PDF, .md, .txt, or video transcript (.txt/.srt/.vtt). For a video, upload its
           subtitle/transcript file.
-        </div>
-        <input ref={fileRef} type="file" accept=".pdf,.md,.txt,.srt,.vtt" />
-        <div style={{ height: 10 }} />
-        <button className="btn" onClick={upload} disabled={fileMutation.isPending}>
-          Upload & Learn
-        </button>
-      </div>
-
-      <div className="card">
-        <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 8 }}>Add a URL</div>
-        <div className="mini" style={{ marginBottom: 8 }}>
-          Blog post / article / research note (public link).
-        </div>
+        </p>
         <input
+          className={controlClass}
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.md,.txt,.srt,.vtt"
+        />
+        <Button className="mt-3" onClick={upload} disabled={fileMutation.isPending}>
+          Upload & Learn
+        </Button>
+      </Card>
+
+      <Card>
+        <CardTitle className="mb-2">Add a URL</CardTitle>
+        <p className={helpTextClass}>Blog post / article / research note (public link).</p>
+        <input
+          className={controlClass}
           type="text"
           placeholder="https://example.com/article"
           inputMode="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
-        <div style={{ height: 10 }} />
-        <button
-          className="btn secondary"
+        <Button
+          className="mt-3"
+          variant="secondary"
           onClick={fetchUrl}
           disabled={urlMutation.isPending}
         >
           Fetch & Learn
-        </button>
-      </div>
+        </Button>
+      </Card>
 
-      <div className="card">
-        <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 8 }}>Knowledge base</div>
-        <div className="mini" style={{ marginBottom: 8 }}>
-          What the screener has learned so far (rules it follows).
-        </div>
-        <button
-          className="btn ghost"
+      <Card>
+        <CardTitle className="mb-2">Knowledge base</CardTitle>
+        <p className={helpTextClass}>What the screener has learned so far (rules it follows).</p>
+        <Button
+          className="mt-3"
+          variant="ghost"
           onClick={() => knowledgeMutation.mutate()}
           disabled={knowledgeMutation.isPending}
         >
           View knowledge base
-        </button>
-        <div style={{ marginTop: 10 }}>
-          {knowledgeMutation.isPending && (
-            <div className="center">
-              <span className="spinner" />
-            </div>
-          )}
+        </Button>
+        <div className="mt-3">
+          {knowledgeMutation.isPending && <LoadingState />}
           {knowledge !== null && !knowledgeMutation.isPending && (
-            <div
-              className="card"
-              style={{
-                whiteSpace: "pre-wrap",
-                fontSize: 12,
-                maxHeight: 320,
-                overflow: "auto",
-              }}
-            >
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-canvas p-3 text-xs text-slate-200">
               {knowledge}
-            </div>
+            </pre>
           )}
         </div>
-      </div>
+      </Card>
     </>
   );
 }

@@ -4,6 +4,9 @@ import { api } from "@/api/endpoints";
 import { useToast } from "@/app/useToast";
 import { Section } from "@/components/Section";
 import { RecommendationCard } from "@/components/RecommendationCard";
+import { Button } from "@/components/ui/Button";
+import { LoadingState } from "@/components/ui/Spinner";
+import { controlClass } from "@/components/ui/styles";
 import type { ScanRow } from "@/types/api";
 
 function parseSymbols(raw: string): string[] {
@@ -61,13 +64,11 @@ export default function RecommendPage() {
 
   return (
     <>
-      <Section
-        title="Recommend"
-        sub="Buy/Sell/Hold with entry, target, stop-loss and reasons."
-      />
+      <Section title="Recommend" sub="Buy/Sell/Hold with entry, target, stop-loss and reasons." />
 
-      <div className="row">
+      <div className="grid gap-3">
         <input
+          className={controlClass}
           type="text"
           placeholder="Symbols e.g. RELIANCE TCS SBIN"
           autoComplete="off"
@@ -75,20 +76,19 @@ export default function RecommendPage() {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && run()}
         />
+        <Button onClick={run} disabled={mutation.isPending}>
+          Get recommendation
+        </Button>
       </div>
 
-      <div style={{ height: 10 }} />
-      <button className="btn" onClick={run} disabled={mutation.isPending}>
-        Get Recommendation
-      </button>
-      <div style={{ height: 14 }} />
-
       {mutation.isPending ? (
-        <div className="center">
-          <span className="spinner" /> Analysing…
-        </div>
+        <LoadingState>Analysing…</LoadingState>
       ) : (
-        rows.map((row, i) => <RecommendationCard key={`${row.symbol}-${i}`} row={row} />)
+        <div className="mt-4">
+          {rows.map((row, i) => (
+            <RecommendationCard key={`${row.symbol}-${i}`} row={row} />
+          ))}
+        </div>
       )}
     </>
   );

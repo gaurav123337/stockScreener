@@ -5,6 +5,8 @@ import type {
   BrokerInstructionsResponse,
   BrokerStatusResponse,
   FiltersResponse,
+  FeedbackReceipt,
+  FeedbackRequest,
   HoldingsResponse,
   KnowledgeResponse,
   LearnResult,
@@ -29,6 +31,9 @@ export const api = {
   logout: () => http.post<{ message: string }>("/api/auth/logout"),
   me: () => http.get<UserProfile>("/api/auth/me"),
 
+  /* Tester feedback */
+  submitFeedback: (body: FeedbackRequest) => http.post<FeedbackReceipt>("/api/feedback", body),
+
   /* Preferences (per-user settings) */
   preferences: () => http.get<Settings>("/api/preferences"),
   updatePreferences: (patch: SettingsPatch) =>
@@ -39,8 +44,7 @@ export const api = {
     http.post<WatchlistResponse>("/api/preferences/watchlist", { symbols }),
 
   /* Analysis */
-  recommend: (symbol: string) =>
-    http.get<ScanRow>(`/api/recommend/${encodeURIComponent(symbol)}`),
+  recommend: (symbol: string) => http.get<ScanRow>(`/api/recommend/${encodeURIComponent(symbol)}`),
   scan: (body: ScanRequest) => http.post<ScanResponse>("/api/scan", body),
   filters: () => http.get<FiltersResponse>("/api/filters"),
   search: (q: string) => http.get<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`),

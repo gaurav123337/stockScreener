@@ -27,6 +27,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from screener.bootstrap import bootstrap, get_service
 from screener.core.config import config
+from screener.core.feedback_models import FeedbackSubmission
 from screener.core.interfaces import MarketDataProvider
 from screener.core.responses import (
     ApiError,
@@ -42,6 +43,7 @@ from screener.services import (
     AnalysisService,
     AuthService,
     BrokerService,
+    FeedbackService,
     FilterService,
     KnowledgeService,
     PreferencesService,
@@ -228,6 +230,10 @@ class WatchlistBody(BaseModel):
     symbols: list[str] = Field(..., max_length=200)
 
 
+class FeedbackBody(FeedbackSubmission):
+    """Rich-text feedback payload from a test user."""
+
+
 # --------------------------------------------------------------------------- #
 # Auth APIs
 # --------------------------------------------------------------------------- #
@@ -297,6 +303,29 @@ def set_watchlist(body: WatchlistBody, user: UserProfile = Depends(get_current_u
     """Set the current user's personal watchlist."""
     prefs = get_service(PreferencesService)
     return {"symbols": prefs.set_watchlist(user.user_id, body.symbols)}
+
+
+# --------------------------------------------------------------------------- #
+# Feedback API
+# --------------------------------------------------------------------------- #
+
+@app.post("/api/feedback", status_code=201)
+def submit_feedback(
+    body: FeedbackBody,
+    user: UserProfile = Depends(get_current_user),
+):
+    """Record tester feedback and return a receipt."""
+    feedback = get_service(FeedbackService)
+    record = feedback.submit(
+        FeedbackSubmission.model_validate(body.model_dump()),
+        user_id=user.user_id,
+        username=user.username,
+    )
+    return {
+        "feedback_id": record.feedback_id,
+        "created_at": record.created_at.isoformat(),
+        "message": "Feedback submitted successfully",
+    }
 
 
 # --------------------------------------------------------------------------- #

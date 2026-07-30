@@ -58,7 +58,11 @@ export function setToken(token: string | null): void {
   }
 }
 
-export function getStoredUser(): { user_id: string; username: string; display_name: string | null } | null {
+export function getStoredUser(): {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+} | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
@@ -68,7 +72,9 @@ export function getStoredUser(): { user_id: string; username: string; display_na
   }
 }
 
-export function setStoredUser(user: { user_id: string; username: string; display_name: string | null } | null): void {
+export function setStoredUser(
+  user: { user_id: string; username: string; display_name: string | null } | null,
+): void {
   try {
     if (user) {
       localStorage.setItem(USER_KEY, JSON.stringify(user));

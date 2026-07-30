@@ -1,7 +1,11 @@
 /** Section metadata and friendly labels for the Settings dashboard. */
 
 export const SECTION_META: ReadonlyArray<readonly [string, string, string]> = [
-  ["scoring", "Scoring & Signals", "How aggressively stocks are scored. Higher weights = that factor matters more."],
+  [
+    "scoring",
+    "Scoring & Signals",
+    "How aggressively stocks are scored. Higher weights = that factor matters more.",
+  ],
   ["risk", "Risk & Trade Levels", "Stop-loss / target calculation."],
   ["data", "Data Fetching", "History window and reliability for market data."],
   ["knowledge", "Knowledge Base", "How training documents are ingested."],

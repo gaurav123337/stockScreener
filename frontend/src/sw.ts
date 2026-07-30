@@ -38,9 +38,7 @@ self.addEventListener("fetch", (event) => {
       .then((response) => {
         if (event.request.method === "GET" && response.ok) {
           const copy = response.clone();
-          void caches
-            .open("screener-runtime")
-            .then((cache) => cache.put(event.request, copy));
+          void caches.open("screener-runtime").then((cache) => cache.put(event.request, copy));
         }
         return response;
       })

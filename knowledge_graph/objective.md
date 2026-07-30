@@ -16,3 +16,7 @@ I want to make it multi tenent so that it can be customized as per specific user
 Basically user can set their preferences.
 And I want platform robust so that it will never hallucinate in any condition.
 It provides the appropriate message.
+
+30-Jul-2026-Feature:-
+Now I want to create a feedback form, so that test users can provide me feedback.
+And that feedback must use Rich text editor so that user user can highlight their concerns and also it supports the emoji.

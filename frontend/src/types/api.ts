@@ -25,6 +25,23 @@ export interface WatchlistResponse {
   symbols: string[];
 }
 
+/* -------------------------------- Feedback ---------------------------------- */
+
+export type FeedbackCategory = "bug" | "concern" | "idea" | "other";
+
+export interface FeedbackRequest {
+  category: FeedbackCategory;
+  title: string;
+  document: Record<string, unknown>;
+  plain_text: string;
+}
+
+export interface FeedbackReceipt {
+  feedback_id: string;
+  created_at: string;
+  message: string;
+}
+
 /** Row shape returned by /api/recommend/{symbol} and inside /api/scan results. */
 export interface ScanRow {
   symbol: string;

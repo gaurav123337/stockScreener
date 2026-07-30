@@ -3,7 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth-context";
 import { ApiError } from "@/api/client";
 import { useToast } from "@/app/useToast";
-import styles from "./auth.module.css";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { controlClass, labelClass } from "@/components/ui/styles";
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -54,18 +56,26 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className={styles.authPage}>
-      <div className={styles.authCard}>
-        <h1 className={styles.title}>Create Account</h1>
-        <p className={styles.subtitle}>Join stockScreener to save your preferences</p>
+    <div className="mx-auto flex min-h-[60vh] max-w-md items-center">
+      <Card className="w-full">
+        <h1 className="text-2xl font-bold">Create account</h1>
+        <p className="mt-1 text-sm text-muted">Join stockScreener to save your preferences</p>
 
-        {error && <div className={styles.error}>{error}</div>}
+        {error && (
+          <div
+            className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200"
+            role="alert"
+          >
+            {error}
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit} className={styles.form}>
-          <label className={styles.label}>
+        <form onSubmit={handleSubmit} className="mt-5 grid gap-4">
+          <label className={labelClass} htmlFor="register-username">
             Username *
             <input
-              className={styles.input}
+              id="register-username"
+              className={controlClass}
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -75,10 +85,11 @@ export default function RegisterPage() {
             />
           </label>
 
-          <label className={styles.label}>
+          <label className={labelClass} htmlFor="register-display-name">
             Display Name
             <input
-              className={styles.input}
+              id="register-display-name"
+              className={controlClass}
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
@@ -87,10 +98,11 @@ export default function RegisterPage() {
             />
           </label>
 
-          <label className={styles.label}>
+          <label className={labelClass} htmlFor="register-password">
             Password *
             <input
-              className={styles.input}
+              id="register-password"
+              className={controlClass}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -100,10 +112,11 @@ export default function RegisterPage() {
             />
           </label>
 
-          <label className={styles.label}>
+          <label className={labelClass} htmlFor="register-confirm-password">
             Confirm Password *
             <input
-              className={styles.input}
+              id="register-confirm-password"
+              className={controlClass}
               type="password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
@@ -113,18 +126,18 @@ export default function RegisterPage() {
             />
           </label>
 
-          <button className={styles.submit} type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading}>
             {loading ? "Creating account…" : "Create Account"}
-          </button>
+          </Button>
         </form>
 
-        <p className={styles.footer}>
+        <p className="mt-5 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-blue-300 [&_a]:hover:underline">
           Already have an account? <Link to="/auth/login">Sign in</Link>
         </p>
-        <p className={styles.footer}>
+        <p className="mt-2 text-center text-sm text-muted [&_a]:font-semibold [&_a]:text-blue-300 [&_a]:hover:underline">
           <Link to="/recommend">Continue as guest</Link>
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

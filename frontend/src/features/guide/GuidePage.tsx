@@ -1,4 +1,5 @@
 import { Section } from "@/components/Section";
+import { Card, CardTitle } from "@/components/ui/Card";
 
 const GUIDE_SECTIONS: ReadonlyArray<{ title: string; items: readonly string[] }> = [
   {
@@ -50,21 +51,19 @@ export default function GuidePage() {
       <Section title="Guide" sub="How to get the most out of the platform." />
 
       {GUIDE_SECTIONS.map((section) => (
-        <div className="card" key={section.title}>
-          <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 6 }}>{section.title}</div>
-          <ol style={{ paddingLeft: 20 }} className="mini">
+        <Card key={section.title}>
+          <CardTitle>{section.title}</CardTitle>
+          <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm leading-6 text-muted">
             {section.items.map((item) => (
-              <li key={item} style={{ margin: "8px 0" }}>
-                {item}
-              </li>
+              <li key={item}>{item}</li>
             ))}
           </ol>
-        </div>
+        </Card>
       ))}
 
-      <div className="mini center" style={{ marginTop: 14 }}>
+      <p className="mt-4 text-center text-xs text-muted">
         Educational tool — not SEBI-registered investment advice.
-      </div>
+      </p>
     </>
   );
 }

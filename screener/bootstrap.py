@@ -20,6 +20,7 @@ from screener.services import (
     AnalysisService,
     AuthService,
     BrokerService,
+    FeedbackService,
     FilterService,
     KnowledgeService,
     PreferencesService,
@@ -50,6 +51,7 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(KnowledgeService, KnowledgeService)
     container.register(FilterService, FilterService)
     container.register(BrokerService, BrokerService)
+    container.register(FeedbackService, FeedbackService)
     container.register(AuthService, AuthService)
     container.register(PreferencesService, PreferencesService)
 

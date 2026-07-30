@@ -2,6 +2,7 @@
 from screener.services.analysis_service import AnalysisService
 from screener.services.auth_service import AuthService
 from screener.services.broker_service import BrokerService
+from screener.services.feedback_service import FeedbackService
 from screener.services.filter_service import FilterService
 from screener.services.knowledge_service import KnowledgeService
 from screener.services.preferences_service import PreferencesService
@@ -12,6 +13,7 @@ __all__ = [
     "AnalysisService",
     "AuthService",
     "BrokerService",
+    "FeedbackService",
     "FilterService",
     "KnowledgeService",
     "PreferencesService",

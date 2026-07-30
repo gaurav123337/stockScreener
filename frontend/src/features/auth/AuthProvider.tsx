@@ -38,23 +38,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(profile);
   }, []);
 
-  const register = useCallback(
-    async (username: string, password: string, displayName?: string) => {
-      const result = await api.register({ username, password, display_name: displayName });
-      queryClient.clear();
-      setToken(result.token);
-      const profile: UserProfile = {
-        user_id: result.user.user_id,
-        username: result.user.username,
-        display_name: result.user.display_name,
-        created_at: result.user.created_at,
-        preferences: result.user.preferences,
-      };
-      setStoredUser(profile);
-      setUser(profile);
-    },
-    [],
-  );
+  const register = useCallback(async (username: string, password: string, displayName?: string) => {
+    const result = await api.register({ username, password, display_name: displayName });
+    queryClient.clear();
+    setToken(result.token);
+    const profile: UserProfile = {
+      user_id: result.user.user_id,
+      username: result.user.username,
+      display_name: result.user.display_name,
+      created_at: result.user.created_at,
+      preferences: result.user.preferences,
+    };
+    setStoredUser(profile);
+    setUser(profile);
+  }, []);
 
   const logout = useCallback(() => {
     clearAuth();
