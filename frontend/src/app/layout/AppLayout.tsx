@@ -1,4 +1,5 @@
 import { usePwaInstall } from "@/app/hooks/usePwaInstall";
+import { useFontSize } from "@/app/hooks/useFontSize";
 import { useTheme } from "@/app/hooks/useTheme";
 import { LoadingState } from "@/components/ui/Spinner";
 import { useAuth } from "@/features/auth/auth-context";
@@ -8,6 +9,7 @@ import {
   Command,
   CircleHelp,
   Download,
+  Minus,
   LogIn,
   LogOut,
   Menu,
@@ -16,6 +18,7 @@ import {
   ScanSearch,
   Settings,
   Sun,
+  Plus,
   TrendingUp,
   UserRound,
   WalletCards,
@@ -135,6 +138,7 @@ export function AppLayout() {
   const { canInstall, promptInstall } = usePwaInstall();
   const { user, isLoggedIn, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { fontSize, increaseFontSize, decreaseFontSize, canIncrease, canDecrease } = useFontSize();
   const navigate = useNavigate();
 
   function handleLogout() {
@@ -193,6 +197,31 @@ export function AppLayout() {
                 <Moon className="size-4" aria-hidden />
               )}
             </button>
+            <div className="flex items-center gap-1" role="group" aria-label="Text size">
+              <button
+                type="button"
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-border text-ink transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={decreaseFontSize}
+                disabled={!canDecrease}
+                aria-label="Decrease text size"
+                title="Decrease text size"
+              >
+                <Minus className="size-4" aria-hidden />
+              </button>
+              <span className="min-w-9 text-center text-xs font-semibold text-muted" aria-live="polite">
+                A {Math.round(fontSize)}%
+              </span>
+              <button
+                type="button"
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-border text-ink transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={increaseFontSize}
+                disabled={!canIncrease}
+                aria-label="Increase text size"
+                title="Increase text size"
+              >
+                <Plus className="size-4" aria-hidden />
+              </button>
+            </div>
             <SecondaryNavigation />
             {isLoggedIn ? (
               <button

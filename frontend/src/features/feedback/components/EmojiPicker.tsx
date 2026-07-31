@@ -16,7 +16,7 @@ export function EmojiPicker(props: {
       </ToolbarButton>
       {props.open && (
         <div
-          className="absolute top-10 right-0 z-20 grid grid-cols-4 gap-1 rounded-lg border border-border bg-surface p-2 shadow-panel sm:right-auto sm:left-0"
+          className="absolute top-10 left-0 z-20 grid w-44 max-w-[calc(100vw-2rem)] grid-cols-4 gap-1 rounded-lg border border-border bg-surface p-2 shadow-panel"
           role="dialog"
           aria-label="Choose an emoji"
         >
@@ -30,6 +30,7 @@ export function EmojiPicker(props: {
                 props.editor.chain().focus().insertContent(emoji).run();
                 props.onClose();
               }}
+              onMouseDown={(event) => event.preventDefault()}
             >
               {emoji}
             </button>

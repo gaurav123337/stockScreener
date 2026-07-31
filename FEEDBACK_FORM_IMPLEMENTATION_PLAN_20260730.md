@@ -99,3 +99,12 @@ The end-to-end feedback path is complete in the working tree and coordinated wit
 - Runtime wiring now uses `FeedbackService` with SQLite persistence only; existing notification adapters remain available as isolated legacy code but are not invoked.
 - Removed obsolete Render email environment variables from `render.yaml`.
 - Updated the feedback workflow documentation and conversation log to describe the API-backed operational flow.
+
+## Accessibility, Emoji, and Control Center Navigation Fixes – 2026-07-31
+
+**Timestamp:** **2026-07-31T17:00:00Z (UTC) | 31-07-2026 22:30:00 (IST)**
+
+- Added persisted **Decrease text size** and **Increase text size** controls to the shared application header. The root font size changes in bounded 12.5% steps from 87.5% through 125%, so the existing rem-based interface scales consistently for elderly users and the selected value survives reloads.
+- Fixed emoji insertion losing the active editor selection by preventing the picker button's mouse-down event from blurring TipTap before insertion. The picker is now constrained to a predictable, viewport-safe grid.
+- Fixed first-click control-center navigation crashes by adding Suspense boundaries around lazy route outlets. Users now receive a loading state while a child route loads instead of React error #426.
+- Verification target: frontend typecheck, lint, production build, and the existing Python test suite.

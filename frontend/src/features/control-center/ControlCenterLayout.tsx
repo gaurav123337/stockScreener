@@ -2,6 +2,7 @@ import { useAuth } from "@/features/auth/auth-context";
 import { cn } from "@/lib/cn";
 import { Activity, ArrowLeft, LayoutDashboard, MessageSquare, Settings2, Users } from "lucide-react";
 import { Navigate, NavLink, Outlet } from "react-router-dom";
+import { Suspense } from "react";
 
 const links = [
   { to: "/control-center", label: "Overview", icon: LayoutDashboard, end: true },
@@ -45,7 +46,11 @@ export default function ControlCenterLayout() {
             ))}
           </nav>
         </aside>
-        <main className="min-w-0 p-4 sm:p-6"><Outlet /></main>
+        <main className="min-w-0 p-4 sm:p-6">
+          <Suspense fallback={<div className="rounded-panel border border-border bg-surface p-6 text-sm text-muted">Loading control center…</div>}>
+            <Outlet />
+          </Suspense>
+        </main>
       </div>
     </div>
   );
