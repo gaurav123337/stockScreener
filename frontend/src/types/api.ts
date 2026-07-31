@@ -271,3 +271,39 @@ export type HoldingsResponse = Record<string, unknown>;
 export interface VerifyResponse {
   [key: string]: unknown;
 }
+
+/* ---------------------------- Indian market API ----------------------------- */
+
+export interface IndianEnvelope<T> {
+  data: T;
+  provider: string;
+  fetched_at: string;
+  stale?: boolean;
+  warnings?: string[];
+}
+
+export interface IndianStock {
+  ticker_id: string;
+  company_name?: string | null;
+  industry?: string | null;
+  current_price: Record<string, number>;
+  percent_change?: number | null;
+  year_high?: number | null;
+  year_low?: number | null;
+  raw?: Record<string, unknown>;
+}
+
+export type IndianRecord = Record<string, unknown>;
+export type IndianSearchResult = IndianRecord;
+export type IndianSnapshot = IndianRecord[] | IndianRecord | null;
+export interface IndianOverview {
+  snapshots: Record<string, IndianSnapshot>;
+}
+export interface IndianHistory {
+  stock_id: string;
+  points: IndianRecord[];
+}
+export interface IndianStats {
+  stock_id: string;
+  stats: unknown;
+}

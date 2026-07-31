@@ -26,3 +26,13 @@ And also configure the other variables used in application.
 And feeback form description is ovelapping the text which user types.
 And check the sign up/sign in and forget password functionality.
 Use email for account creation.
+
+31-Jul-2026-Fixes
+Currently it is using gmail for sending the user feedback.
+But I don't want it to use it. I want a simple way to get these user feedback.
+I think a pulic api for it will be great help.
+And also in 'Detail' section, still text is overlapping.
+
+I want to add increase/decrease font functionality for elderly people.
+And in feedback form emoji selections is bit broken.
+And also in control-center, when I click any navigation, it broke first then again if I click, it works.

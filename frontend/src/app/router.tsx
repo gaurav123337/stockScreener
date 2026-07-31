@@ -19,6 +19,7 @@ const RegisterPage = lazy(() => import("@/features/auth/RegisterPage"));
 const ForgotPasswordPage = lazy(() => import("@/features/auth/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("@/features/auth/ResetPasswordPage"));
 const VerifyEmailPage = lazy(() => import("@/features/auth/VerifyEmailPage"));
+const IndianMarketPage = lazy(() => import("@/features/indian-market/IndianMarketPage"));
 const ControlCenterLayout = lazy(() => import("@/features/control-center/ControlCenterLayout"));
 const OverviewPage = lazy(() => import("@/features/control-center/OverviewPage"));
 const UsersPage = lazy(() => import("@/features/control-center/UsersPage"));
@@ -46,6 +47,7 @@ export const router = createHashRouter([
       { path: "scan", element: <ScanPage /> },
       { path: "train", element: <TrainPage /> },
       { path: "brokers", element: <BrokersPage /> },
+      { path: "indian-market", element: <IndianMarketPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "guide", element: <GuidePage /> },
       { path: "feedback", element: <FeedbackPage /> },

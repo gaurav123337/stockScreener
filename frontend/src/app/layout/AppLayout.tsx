@@ -1,24 +1,25 @@
-import { usePwaInstall } from "@/app/hooks/usePwaInstall";
 import { useFontSize } from "@/app/hooks/useFontSize";
+import { usePwaInstall } from "@/app/hooks/usePwaInstall";
 import { useTheme } from "@/app/hooks/useTheme";
 import { LoadingState } from "@/components/ui/Spinner";
 import { useAuth } from "@/features/auth/auth-context";
 import { cn } from "@/lib/cn";
 import {
   BrainCircuit,
-  Command,
   CircleHelp,
+  Command,
   Download,
-  Minus,
+  Landmark,
   LogIn,
   LogOut,
   Menu,
   MessageSquareHeart,
+  Minus,
   Moon,
+  Plus,
   ScanSearch,
   Settings,
   Sun,
-  Plus,
   TrendingUp,
   UserRound,
   WalletCards,
@@ -36,6 +37,7 @@ interface NavigationItem {
 const PRIMARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
   { to: "/recommend", icon: TrendingUp, label: "Recommended" },
   { to: "/scan", icon: ScanSearch, label: "Scan" },
+  { to: "/indian-market", icon: Landmark, label: "Indian Market" },
   { to: "/train", icon: BrainCircuit, label: "Train" },
   { to: "/brokers", icon: WalletCards, label: "Broker" },
 ];
@@ -208,7 +210,10 @@ export function AppLayout() {
               >
                 <Minus className="size-4" aria-hidden />
               </button>
-              <span className="min-w-9 text-center text-xs font-semibold text-muted" aria-live="polite">
+              <span
+                className="min-w-9 text-center text-xs font-semibold text-muted"
+                aria-live="polite"
+              >
                 A {Math.round(fontSize)}%
               </span>
               <button
@@ -256,7 +261,7 @@ export function AppLayout() {
         </main>
       </div>
 
-      <PrimaryNavigation className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border bg-canvas/95 px-1 pt-1 pb-[calc(0.25rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden" />
+      <PrimaryNavigation className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-border bg-canvas/95 px-1 pt-1 pb-[calc(0.25rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden" />
     </div>
   );
 }
