@@ -50,6 +50,7 @@ from screener.services import (
     PreferencesService,
     ScanService,
     VerificationService,
+    IndianMarketService,
 )
 
 # Wire all dependencies
@@ -651,6 +652,90 @@ def verify(user: UserProfile = Depends(get_current_user)):
         return verification.verify(price_of).model_dump(mode="json")
     except Exception as e:
         raise DataSourceError(f"Verification failed: {e}")
+
+
+# --------------------------------------------------------------------------- #
+# Indian market research APIs (optional, server-side provider)
+# --------------------------------------------------------------------------- #
+
+def _indian_market() -> IndianMarketService:
+    return get_service(IndianMarketService)
+
+
+@app.get("/api/indian-market/stock")
+def indian_stock(q: str = "", user: UserProfile = Depends(get_current_user)):
+    return _indian_market().stock(q)
+
+
+@app.get("/api/indian-market/industry-search")
+def indian_industry_search(q: str = "", user: UserProfile = Depends(get_current_user)):
+    return _indian_market().search("industry_search", q)
+
+
+@app.get("/api/indian-market/mutual-funds/search")
+def indian_mutual_fund_search(q: str = "", user: UserProfile = Depends(get_current_user)):
+    return _indian_market().search("mutual_fund_search", q)
+
+
+@app.get("/api/indian-market/overview")
+def indian_overview(user: UserProfile = Depends(get_current_user)):
+    service = _indian_market()
+    return {
+        "provider": "indian_api",
+        "snapshots": {
+            endpoint: service.snapshot(endpoint)
+            for endpoint in (
+                "trending", "52_week_high_low", "nse_most_active",
+                "bse_most_active", "price_shockers", "commodities",
+            )
+        },
+    }
+
+
+@app.get("/api/indian-market/stock/{stock_id}/history")
+def indian_history(
+    stock_id: str,
+    period: str = "1Y",
+    filter: str = "price",
+    user: UserProfile = Depends(get_current_user),
+):
+    if len(period) > 20 or len(filter) > 50:
+        raise ValidationError("Invalid historical query parameters")
+    return _indian_market().history(stock_id, period=period, filter=filter)
+
+
+@app.get("/api/indian-market/stock/{stock_id}/stats")
+def indian_stats(
+    stock_id: str,
+    stats: str = "",
+    user: UserProfile = Depends(get_current_user),
+):
+    if len(stats) > 100:
+        raise ValidationError("Invalid stats query parameter")
+    return _indian_market().stats(stock_id, stats=stats)
+
+
+@app.get("/api/indian-market/stock/{stock_id}/recommendations")
+def indian_recommendations(stock_id: str, user: UserProfile = Depends(get_current_user)):
+    return _indian_market().analysis("stock_target_price", stock_id)
+
+
+@app.get("/api/indian-market/stock/{stock_id}/forecasts")
+def indian_forecasts(
+    stock_id: str,
+    measure_code: str = "",
+    period_type: str = "",
+    data_type: str = "",
+    age: str = "",
+    user: UserProfile = Depends(get_current_user),
+):
+    query = {key: value for key, value in {
+        "measure_code": measure_code, "period_type": period_type,
+        "data_type": data_type, "age": age,
+    }.items() if value}
+    if any(len(value) > 100 for value in query.values()):
+        raise ValidationError("Invalid forecast query parameter")
+    return _indian_market().analysis("stock_forecasts", stock_id, **query)
 
 
 # --------------------------------------------------------------------------- #

@@ -12,6 +12,7 @@ from screener.core.interfaces import (
     PredictionRepository,
 )
 from screener.infrastructure.data.yahoo_provider import YahooDataProvider
+from screener.infrastructure.data.indian_api_client import IndianApiClient
 from screener.infrastructure.persistence.csv_repository import (
     CSVPredictionRepository,
     MarkdownKnowledgeStore,
@@ -27,7 +28,9 @@ from screener.services import (
     PreferencesService,
     ScanService,
     VerificationService,
+    IndianMarketService,
 )
+from screener.core.indian_market import IndianMarketGateway
 
 
 def bootstrap(environment: str | None = None) -> None:
@@ -42,6 +45,7 @@ def bootstrap(environment: str | None = None) -> None:
 
     # Infrastructure
     container.register(MarketDataProvider, YahooDataProvider)
+    container.register(IndianMarketGateway, factory=lambda: IndianApiClient(config.indian_api))
     container.register(PredictionRepository, CSVPredictionRepository)
     container.register(KnowledgeStore, MarkdownKnowledgeStore)
     # Services
@@ -57,6 +61,7 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(FeedbackService, FeedbackService)
     container.register(AuthService, AuthService)
     container.register(PreferencesService, PreferencesService)
+    container.register(IndianMarketService, factory=lambda: IndianMarketService(get_service(IndianMarketGateway)))
 
 
 def get_service(service_type):

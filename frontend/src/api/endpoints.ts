@@ -1,24 +1,29 @@
-import { http } from "./client";
 import type {
-  AuthToken,
   AdminFeedback,
   AdminFeedbackDetail,
   AdminOverview,
   AdminUser,
   AuditEvent,
-  ConfigPublication,
-  ConfigDiff,
-  ConfigRegistryItem,
-  Paginated,
+  AuthToken,
   BrokerConnectRequest,
   BrokerInstructionsResponse,
   BrokerStatusResponse,
-  FiltersResponse,
+  ConfigDiff,
+  ConfigPublication,
+  ConfigRegistryItem,
   FeedbackReceipt,
   FeedbackRequest,
+  FiltersResponse,
   HoldingsResponse,
+  IndianEnvelope,
+  IndianHistory,
+  IndianSearchResult,
+  IndianSnapshot,
+  IndianStats,
+  IndianStock,
   KnowledgeResponse,
   LearnResult,
+  Paginated,
   ScanRequest,
   ScanResponse,
   ScanRow,
@@ -29,32 +34,51 @@ import type {
   VerifyResponse,
   WatchlistResponse,
 } from "@/types/api";
+import { http } from "./client";
 
 /** Typed wrappers around every backend endpoint (see api.py). */
 export const api = {
   /* Auth */
-  register: (body: { email: string; password: string; password_confirmation: string; display_name?: string }) =>
-    http.post<AuthToken>("/api/auth/register", body),
+  register: (body: {
+    email: string;
+    password: string;
+    password_confirmation: string;
+    display_name?: string;
+  }) => http.post<AuthToken>("/api/auth/register", body),
   login: (body: { email: string; password: string }) =>
     http.post<AuthToken>("/api/auth/login", body),
   logout: () => http.post<{ message: string }>("/api/auth/logout"),
   logoutAll: () => http.post<{ message: string }>("/api/auth/logout-all"),
   verifyEmail: (token: string) => http.post<UserProfile>("/api/auth/verify-email", { token }),
   resendVerification: () => http.post<{ message: string }>("/api/auth/resend-verification"),
-  forgotPassword: (email: string) => http.post<{ message: string }>("/api/auth/forgot-password", { email }),
+  forgotPassword: (email: string) =>
+    http.post<{ message: string }>("/api/auth/forgot-password", { email }),
   resetPassword: (token: string, password: string, passwordConfirmation: string) =>
-    http.post<{ message: string }>("/api/auth/reset-password", { token, password, password_confirmation: passwordConfirmation }),
+    http.post<{ message: string }>("/api/auth/reset-password", {
+      token,
+      password,
+      password_confirmation: passwordConfirmation,
+    }),
   me: () => http.get<UserProfile>("/api/auth/me"),
 
   /* Product owner control center */
   adminOverview: () => http.get<AdminOverview>("/api/admin/overview"),
-  adminUsers: (query = "") => http.get<Paginated<AdminUser>>(`/api/admin/users${query ? `?${query}` : ""}`),
-  adminUser: (userId: string) => http.get<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}`),
+  adminUsers: (query = "") =>
+    http.get<Paginated<AdminUser>>(`/api/admin/users${query ? `?${query}` : ""}`),
+  adminUser: (userId: string) =>
+    http.get<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}`),
   setAdminUserStatus: (userId: string, status: string, reason: string) =>
-    http.post<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/status`, { status, reason }),
+    http.post<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/status`, {
+      status,
+      reason,
+    }),
   sendAdminPasswordReset: (userId: string, reason: string) =>
-    http.post<{ message: string }>(`/api/admin/users/${encodeURIComponent(userId)}/password-reset`, { reason }),
-  adminFeedback: (query = "") => http.get<Paginated<AdminFeedback>>(`/api/admin/feedback${query ? `?${query}` : ""}`),
+    http.post<{ message: string }>(
+      `/api/admin/users/${encodeURIComponent(userId)}/password-reset`,
+      { reason },
+    ),
+  adminFeedback: (query = "") =>
+    http.get<Paginated<AdminFeedback>>(`/api/admin/feedback${query ? `?${query}` : ""}`),
   adminFeedbackDetail: (feedbackId: string) =>
     http.get<AdminFeedbackDetail>(`/api/admin/feedback/${encodeURIComponent(feedbackId)}`),
   updateAdminFeedback: (feedbackId: string, body: Record<string, unknown>) =>
@@ -63,10 +87,21 @@ export const api = {
   currentGlobalConfig: () => http.get<ConfigPublication>("/api/admin/config/current"),
   validateGlobalConfig: (patch: SettingsPatch) =>
     http.post<{ valid: boolean; values: Settings }>("/api/admin/config/validate", { patch }),
-  diffGlobalConfig: (patch: SettingsPatch) => http.post<ConfigDiff>("/api/admin/config/diff", { patch }),
+  diffGlobalConfig: (patch: SettingsPatch) =>
+    http.post<ConfigDiff>("/api/admin/config/diff", { patch }),
   globalConfigHistory: () => http.get<{ items: ConfigPublication[] }>("/api/admin/config/history"),
-  publishGlobalConfig: (patch: SettingsPatch, policies: Record<string, string>, reason: string, expectedVersion: number) =>
-    http.post<ConfigPublication>("/api/admin/config/publish", { patch, policies, reason, expected_version: expectedVersion }),
+  publishGlobalConfig: (
+    patch: SettingsPatch,
+    policies: Record<string, string>,
+    reason: string,
+    expectedVersion: number,
+  ) =>
+    http.post<ConfigPublication>("/api/admin/config/publish", {
+      patch,
+      policies,
+      reason,
+      expected_version: expectedVersion,
+    }),
   rollbackGlobalConfig: (version: number, reason: string) =>
     http.post<ConfigPublication>("/api/admin/config/rollback", { version, reason }),
   adminAudit: () => http.get<{ items: AuditEvent[] }>("/api/admin/audit"),
@@ -115,4 +150,41 @@ export const api = {
   brokerDisconnect: (broker: string) =>
     http.post<Record<string, unknown>>(`/api/brokers/disconnect/${encodeURIComponent(broker)}`),
   brokerHoldings: () => http.get<HoldingsResponse>("/api/brokers/holdings"),
+
+  /* Optional Indian market workspace (credentials stay server-side). */
+  indianStock: (query: string) =>
+    http.get<IndianEnvelope<IndianStock>>(
+      `/api/indian-market/stock?q=${encodeURIComponent(query)}`,
+    ),
+  indianIndustrySearch: (query: string) =>
+    http.get<IndianEnvelope<IndianSearchResult[]>>(
+      `/api/indian-market/industry-search?q=${encodeURIComponent(query)}`,
+    ),
+  indianMutualFundSearch: (query: string) =>
+    http.get<IndianEnvelope<IndianSearchResult[]>>(
+      `/api/indian-market/mutual-funds/search?q=${encodeURIComponent(query)}`,
+    ),
+  indianOverview: () => http.get<IndianEnvelope<IndianSnapshot>>("/api/indian-market/overview"),
+  indianHistory: (stockId: string, period = "", filter = "") => {
+    const params = new URLSearchParams();
+    if (period) params.set("period", period);
+    if (filter) params.set("filter", filter);
+    return http.get<IndianEnvelope<IndianHistory>>(
+      `/api/indian-market/stock/${encodeURIComponent(stockId)}/history${params.size ? `?${params}` : ""}`,
+    );
+  },
+  indianStats: (stockId: string, stats = "") =>
+    http.get<IndianEnvelope<IndianStats>>(
+      `/api/indian-market/stock/${encodeURIComponent(stockId)}/stats${stats ? `?stats=${encodeURIComponent(stats)}` : ""}`,
+    ),
+  indianRecommendations: (stockId: string) =>
+    http.get<IndianEnvelope<unknown>>(
+      `/api/indian-market/stock/${encodeURIComponent(stockId)}/recommendations`,
+    ),
+  indianForecasts: (stockId: string, params: Record<string, string> = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => Boolean(value)));
+    return http.get<IndianEnvelope<unknown>>(
+      `/api/indian-market/stock/${encodeURIComponent(stockId)}/forecasts${query.size ? `?${query}` : ""}`,
+    );
+  },
 };

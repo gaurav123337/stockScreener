@@ -72,6 +72,19 @@ class VerificationConfig(BaseSettings):
     horizon_days: int = 30
 
 
+class IndianApiConfig(BaseSettings):
+    """Deployment-managed settings for the optional Indian market API."""
+    model_config = SettingsConfigDict(env_prefix="SCREENER_INDIAN_API_")
+
+    enabled: bool = False
+    base_url: str = ""
+    api_key: str = Field(default="", repr=False)
+    timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    retry_attempts: int = Field(default=2, ge=0, le=5)
+    cache_ttl_seconds: int = Field(default=30, ge=0, le=3600)
+    rate_limit_per_minute: int = Field(default=60, ge=1, le=10_000)
+
+
 class AppConfig(BaseSettings):
     """Root application configuration."""
     model_config = SettingsConfigDict(env_prefix="SCREENER_")
@@ -89,6 +102,8 @@ class AppConfig(BaseSettings):
     risk: RiskConfig = Field(default_factory=RiskConfig)
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
     verification: VerificationConfig = Field(default_factory=VerificationConfig)
+    indian_api: IndianApiConfig = Field(default_factory=IndianApiConfig)
+    market_data_provider: Literal["yahoo", "indian_api", "hybrid"] = "yahoo"
 
     # Environment
     environment: Literal["development", "production", "testing"] = "development"
