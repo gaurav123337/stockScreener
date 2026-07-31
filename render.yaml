@@ -16,3 +16,14 @@ services:
       # Required only when the account does not exist yet. Use 12-128 characters.
       - key: SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD
         sync: false
+      # Optional Indian market workspace rollout. Keep disabled until staging smoke tests pass.
+      - key: SCREENER_INDIAN_API_ENABLED
+        value: "false"
+      - key: SCREENER_INDIAN_API_BASE_URL
+        sync: false
+      - key: SCREENER_INDIAN_API_API_KEY
+        sync: false
+      - key: SCREENER_INDIAN_API_AUTH_HEADER
+        value: X-Api-Key
+      - key: SCREENER_INDIAN_API_AUTH_SCHEME
+        value: ""

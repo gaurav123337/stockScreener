@@ -47,6 +47,17 @@ class IndianApiEnvelope(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class IndianApiTelemetry(BaseModel):
+    requests: int = 0
+    cache_hits: int = 0
+    successes: int = 0
+    errors: int = 0
+    rate_limits: int = 0
+    average_latency_ms: float = 0.0
+    last_status_code: int | None = None
+    last_error: str | None = None
+
+
 class IndianMarketGateway:
     """Protocol-like gateway boundary without coupling core to HTTP."""
 
@@ -66,4 +77,7 @@ class IndianMarketGateway:
         raise NotImplementedError
 
     def analysis(self, endpoint: str, stock_id: str, **params: str) -> Any:  # pragma: no cover
+        raise NotImplementedError
+
+    def telemetry(self) -> IndianApiTelemetry:  # pragma: no cover
         raise NotImplementedError

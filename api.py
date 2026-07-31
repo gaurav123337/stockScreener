@@ -662,6 +662,12 @@ def _indian_market() -> IndianMarketService:
     return get_service(IndianMarketService)
 
 
+@app.get("/api/indian-market/status")
+def indian_market_status(user: UserProfile = Depends(require_product_owner)):
+    """Expose rollout health without returning provider secrets or payloads."""
+    return _indian_market().rollout_status()
+
+
 @app.get("/api/indian-market/stock")
 def indian_stock(q: str = "", user: UserProfile = Depends(get_current_user)):
     return _indian_market().stock(q)

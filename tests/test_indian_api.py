@@ -69,6 +69,10 @@ def test_identical_requests_use_ttl_cache():
     assert api.search("industry_search", "bank") == [{"id": "S1"}]
     assert api.search("industry_search", "bank") == [{"id": "S1"}]
     assert len(session.calls) == 1
+    telemetry = api.telemetry()
+    assert telemetry.requests == 1
+    assert telemetry.cache_hits == 1
+    assert telemetry.successes == 1
 
 
 def test_disabled_and_http_errors_are_structured():
@@ -125,3 +129,21 @@ def test_secret_is_not_in_editable_snapshot():
     snapshot = settings.editable_snapshot()
     assert "indian_api" not in snapshot
     assert "secret" not in repr(snapshot)
+
+
+def test_configurable_bearer_auth_and_redacted_rollout_status(monkeypatch):
+    session = FakeSession(FakeResponse([]))
+    api = client(session)
+    api.settings.auth_header = "Authorization"
+    api.settings.auth_scheme = "Bearer"
+    api.snapshot("trending")
+
+    assert session.calls[0]["headers"]["Authorization"] == "Bearer secret-do-not-return"
+
+    monkeypatch.setattr(config.indian_api, "enabled", True)
+    monkeypatch.setattr(config.indian_api, "base_url", "https://api.example.test")
+    monkeypatch.setattr(config.indian_api, "api_key", "secret-do-not-return")
+    status = IndianMarketService(api).rollout_status()
+    assert status["configured"] is True
+    assert "secret-do-not-return" not in repr(status)
+    assert status["telemetry"]["successes"] == 1

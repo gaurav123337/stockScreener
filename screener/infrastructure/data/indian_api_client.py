@@ -13,6 +13,7 @@ from screener.core.indian_market import (
     HistoricalSeries,
     HistoricalStats,
     IndianMarketGateway,
+    IndianApiTelemetry,
     StockSummary,
 )
 from screener.core.responses import DataSourceError
@@ -50,6 +51,19 @@ class IndianApiClient(IndianMarketGateway):
         self.session = session or requests.Session()
         self._cache: dict[tuple[str, tuple[tuple[str, str], ...]], tuple[float, Any]] = {}
         self._cache_lock = threading.Lock()
+        self._telemetry = IndianApiTelemetry()
+        self._telemetry_lock = threading.Lock()
+
+    def _record(self, **changes: Any) -> None:
+        with self._telemetry_lock:
+            current = self._telemetry.model_dump()
+            for key, value in changes.items():
+                current[key] = current[key] + value if key in {"requests", "cache_hits", "successes", "errors", "rate_limits"} else value
+            self._telemetry = IndianApiTelemetry(**current)
+
+    def telemetry(self) -> IndianApiTelemetry:
+        with self._telemetry_lock:
+            return self._telemetry.model_copy(deep=True)
 
     def _request(self, endpoint: str, params: dict[str, str] | None = None) -> Any:
         if not self.settings.enabled:
@@ -65,22 +79,34 @@ class IndianApiClient(IndianMarketGateway):
         with self._cache_lock:
             cached = self._cache.get(cache_key)
             if cached and now - cached[0] < self.settings.cache_ttl_seconds:
+                self._record(cache_hits=1)
                 return cached[1]
         request_params = dict(params or {})
         headers = {"Accept": "application/json", "User-Agent": "stockScreener/indian-market"}
         if self.settings.api_key:
-            headers["X-Api-Key"] = self.settings.api_key
+            prefix = f"{self.settings.auth_scheme.strip()} " if self.settings.auth_scheme.strip() else ""
+            headers[self.settings.auth_header] = f"{prefix}{self.settings.api_key}"
         url = f"{self.settings.base_url.rstrip('/')}{meta.path}"
         last_error: Exception | None = None
         for attempt in range(self.settings.retry_attempts + 1):
+            started_at = time.monotonic()
+            self._record(requests=1)
             try:
                 response = self.session.get(url, params=request_params, headers=headers,
                                             timeout=self.settings.timeout_seconds)
+                latency_ms = (time.monotonic() - started_at) * 1000
+                self._record(last_status_code=response.status_code)
                 if response.status_code == 429:
+                    self._record(errors=1, rate_limits=1, last_error="rate_limit")
                     raise DataSourceError("Indian market API rate limit reached")
                 if response.status_code >= 400:
+                    self._record(errors=1, last_error=f"http_{response.status_code}")
                     raise DataSourceError(f"Indian market API returned HTTP {response.status_code}")
                 payload = response.json()
+                previous_successes = self.telemetry().successes
+                previous_average = self.telemetry().average_latency_ms
+                average = ((previous_average * previous_successes) + latency_ms) / (previous_successes + 1)
+                self._record(successes=1, average_latency_ms=round(average, 2), last_error=None)
                 with self._cache_lock:
                     self._cache[cache_key] = (time.monotonic(), payload)
                 return payload
@@ -88,6 +114,7 @@ class IndianApiClient(IndianMarketGateway):
                 raise
             except (requests.RequestException, ValueError) as exc:
                 last_error = exc
+                self._record(errors=1, last_error=type(exc).__name__)
                 if attempt < self.settings.retry_attempts:
                     time.sleep(min(0.25 * (2 ** attempt), 2.0))
         raise DataSourceError("Indian market API request failed") from last_error

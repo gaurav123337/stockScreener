@@ -402,3 +402,57 @@ The upstream API response subtrees are intentionally rendered defensively
 until live sanitized fixtures confirm field names for every overview and
 analytical payload. The next provider rollout phase should promote stable
 fields into typed presentation models and add fixture-backed frontend tests.
+
+## Update – Indian Market workspace completion (2026-07-31)
+
+- Added debounced company, industry, and mutual-fund discovery so provider
+  quota is not consumed for every keystroke.
+- Added explicit empty-search results, disabled open behavior, and selection
+  of provider identifiers from discovery results.
+- Surfaced overview warnings and stale metadata, plus loading/error states for
+  recommendation and forecast panels.
+- Revalidated the frontend with the strict ESLint command and production
+  TypeScript/Vite/PWA build.
+
+### Final status
+
+Phase 2 backend/API foundation and the Phase 3 React workspace are complete.
+Yahoo Finance remains unchanged as the primary market-data provider.
+
+## Update – Phase 4 rollout readiness (2026-07-31)
+
+### Completed code-owned rollout work
+
+- Added deployment-managed `auth_header` and `auth_scheme` settings so the
+  provider's authentication convention can be configured without code edits.
+- Added redacted `IndianApiTelemetry` counters for requests, cache hits,
+  successes, errors, rate limits, latency, and the last HTTP/error status.
+- Added Product Owner-only `GET /api/indian-market/status`; it reports enablement,
+  configuration presence, provider selection, and telemetry without returning
+  the API key or upstream data.
+- Added `scripts/smoke_indian_api.py`, a manual live check that is excluded from
+  CI and prints only pass/fail names plus sanitized telemetry.
+- Added Render environment entries for the feature flag, base URL, API key,
+  authentication header, and optional scheme. The flag remains disabled by
+  default.
+
+### Phase 4 runbook
+
+1. Confirm the provider's official base URL, authentication header/scheme,
+   terms, quota, and caching/redistribution rules.
+2. Set the five Indian API variables in a disposable Render preview, leaving
+   `SCREENER_INDIAN_API_ENABLED=false` while validating configuration.
+3. Enable the flag and run `python scripts/smoke_indian_api.py --stock RELIANCE`
+   during both open and closed-market windows. Do not run this in CI.
+4. Review Product Owner status at `/api/indian-market/status` for latency,
+   error, and rate-limit counters; capture sanitized fixtures and compatibility
+   decisions for each endpoint.
+5. Keep `SCREENER_MARKET_DATA_PROVIDER=yahoo` until endpoint compatibility and
+   reliability are approved. Only then decide whether a separate, explicitly
+   configured hybrid capability should be introduced.
+
+### Current Phase 4 status
+
+The repository is rollout-ready, but live activation is intentionally blocked
+until a real provider key, official auth convention, and terms confirmation are
+available. No live provider call was made from this development environment.

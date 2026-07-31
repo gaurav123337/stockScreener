@@ -53,11 +53,11 @@ For an account that was already registered, do not set the initial-password vari
 
 Local direct bootstrap example:
 
-   ```powershell
-   $env:SCREENER_PRODUCT_OWNER_EMAIL = "owner@example.com"
-   $env:SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD = "use-a-unique-long-password"
-   python api.py
-   ```
+```powershell
+$env:SCREENER_PRODUCT_OWNER_EMAIL = "owner@example.com"
+$env:SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD = "use-a-unique-long-password"
+python api.py
+```
 
 If startup reports `Configured product-owner account must have a verified email`, verify the pre-existing account or use a different email for deployment-owned creation. If it reports that the account was not found, either register and verify it or supply the initial password. Existing unverified accounts are never auto-promoted, preventing someone from pre-registering a known administrator email and gaining elevated access.
 
@@ -89,6 +89,29 @@ Then open `http://localhost:8000` and `http://localhost:8000/api/health`.
 | Hugging Face Spaces | Possible with Docker  | Better suited to public ML demos; persistent storage is not included in the basic free runtime |
 
 Provider limits change. Recheck the official free-tier documentation before a wider release.
+
+## Optional Indian Market Rollout
+
+The Indian Market workspace is disabled by default and does not replace Yahoo
+Finance. Configure these Render variables only after confirming the provider's
+current official authentication and terms:
+
+- `SCREENER_INDIAN_API_ENABLED=false` initially, then `true` for the preview.
+- `SCREENER_INDIAN_API_BASE_URL` and `SCREENER_INDIAN_API_API_KEY` as secrets.
+- `SCREENER_INDIAN_API_AUTH_HEADER` (default `X-Api-Key`).
+- `SCREENER_INDIAN_API_AUTH_SCHEME` (empty by default; use `Bearer` only if the
+  provider requires it).
+
+Run the non-CI smoke check from the deployed application environment:
+
+```powershell
+python scripts/smoke_indian_api.py --stock RELIANCE
+```
+
+The command does not print response payloads or credentials. Product Owners can
+inspect sanitized counters and latency at `/api/indian-market/status`. Keep
+`SCREENER_MARKET_DATA_PROVIDER=yahoo` during Phase 4; the Indian API routes are
+an explicitly separate research workspace until compatibility is approved.
 
 ## Update Or Remove
 

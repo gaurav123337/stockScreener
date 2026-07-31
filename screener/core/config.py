@@ -79,10 +79,20 @@ class IndianApiConfig(BaseSettings):
     enabled: bool = False
     base_url: str = ""
     api_key: str = Field(default="", repr=False)
+    auth_header: str = "X-Api-Key"
+    auth_scheme: str = ""
     timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     retry_attempts: int = Field(default=2, ge=0, le=5)
     cache_ttl_seconds: int = Field(default=30, ge=0, le=3600)
     rate_limit_per_minute: int = Field(default=60, ge=1, le=10_000)
+
+    @field_validator("auth_header")
+    @classmethod
+    def _validate_auth_header(cls, value: str) -> str:
+        value = value.strip()
+        if not value or any(char in value for char in "\r\n:"):
+            raise ValueError("auth_header must be a valid HTTP header name")
+        return value
 
 
 class AppConfig(BaseSettings):

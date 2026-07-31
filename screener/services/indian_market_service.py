@@ -52,3 +52,13 @@ class IndianMarketService:
 
     def analysis(self, endpoint: str, stock_id: str, **params: str) -> dict[str, Any]:
         return self._envelope(self._gateway().analysis(endpoint, self._required(stock_id, "stock_id"), **params))
+
+    def rollout_status(self) -> dict[str, Any]:
+        gateway = self.gateway
+        telemetry = gateway.telemetry().model_dump() if gateway is not None else None
+        return {
+            "enabled": config.indian_api.enabled,
+            "configured": bool(config.indian_api.base_url and config.indian_api.api_key),
+            "market_data_provider": config.market_data_provider,
+            "telemetry": telemetry,
+        }

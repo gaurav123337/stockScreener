@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/Spinner";
 import type { IndianRecord, IndianSnapshot, IndianStock } from "@/types/api";
 import { RefreshCw, Search, TrendingDown, TrendingUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useIndianOverview,
   useIndianSearch,
@@ -23,6 +23,15 @@ function displayValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+}
+
+function useDebouncedValue(value: string, delay = 350): string {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [delay, value]);
+  return debounced;
 }
 
 function SnapshotCard({
@@ -107,9 +116,13 @@ export default function IndianMarketPage() {
   const [mode, setMode] = useState<"stock" | "industry" | "mutual-fund">("stock");
   const [stockId, setStockId] = useState("");
   const [period, setPeriod] = useState("1y");
+  const debouncedQuery = useDebouncedValue(query);
   const overview = useIndianOverview();
-  const stock = useIndianStock(mode === "stock" ? query : "");
-  const discovery = useIndianSearch(query, mode === "mutual-fund" ? "mutual-fund" : "industry");
+  const stock = useIndianStock(mode === "stock" ? debouncedQuery : "");
+  const discovery = useIndianSearch(
+    mode === "stock" ? "" : debouncedQuery,
+    mode === "mutual-fund" ? "mutual-fund" : "industry",
+  );
   const data = useIndianStockData(stockId, period, "");
   const stockData = stock.data?.data as IndianStock | undefined;
   const snapshots = useMemo(
@@ -125,6 +138,11 @@ export default function IndianMarketPage() {
       void data.history.refetch();
       void data.stats.refetch();
     }
+  };
+
+  const openSelection = () => {
+    const nextStockId = stockData?.ticker_id || query.trim();
+    if (nextStockId) setStockId(nextStockId);
   };
 
   return (
@@ -159,7 +177,8 @@ export default function IndianMarketPage() {
           <Button
             fullWidth={false}
             variant="secondary"
-            onClick={() => setStockId(stockData?.ticker_id || query.trim())}
+            onClick={openSelection}
+            disabled={!query.trim() && !stockData?.ticker_id}
           >
             <Search className="size-4" aria-hidden />
             Open
@@ -173,8 +192,11 @@ export default function IndianMarketPage() {
             <RefreshCw className="size-4" aria-hidden />
           </Button>
         </div>
-        {mode === "stock" && stock.isFetching && (
-          <p className="mt-3 text-sm text-muted">Searching…</p>
+        {((mode === "stock" && stock.isFetching) ||
+          (mode !== "stock" && discovery.isFetching)) && (
+          <p className="mt-3 text-sm text-muted" role="status" aria-live="polite">
+            Searching…
+          </p>
         )}
         {mode !== "stock" && discovery.data?.data && (
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -183,7 +205,12 @@ export default function IndianMarketPage() {
                 key={index}
                 type="button"
                 className="rounded-lg border border-border bg-surface p-3 text-left text-sm text-ink hover:border-focus"
-                onClick={() => setQuery(displayValue(item.name ?? item.companyName ?? item.symbol))}
+                onClick={() => {
+                  setQuery(displayValue(item.name ?? item.companyName ?? item.symbol));
+                  if (item.id ?? item.tickerId ?? item.code) {
+                    setStockId(displayValue(item.id ?? item.tickerId ?? item.code));
+                  }
+                }}
               >
                 {displayValue(item.name ?? item.companyName ?? item.symbol)}
                 <span className="block text-xs text-muted">
@@ -192,6 +219,9 @@ export default function IndianMarketPage() {
               </button>
             ))}
           </div>
+        )}
+        {mode !== "stock" && !discovery.isFetching && debouncedQuery && discovery.data?.data?.length === 0 && (
+          <p className="mt-3 text-sm text-muted">No matching {mode === "industry" ? "industries" : "mutual funds"} found.</p>
         )}
         {stock.isError && (
           <p className="mt-3 text-sm text-danger">
@@ -210,6 +240,14 @@ export default function IndianMarketPage() {
         </Card>
       ) : (
         <>
+          {(overview.data?.warnings?.length ?? 0) > 0 && (
+            <Card className="border-amber-500/40 bg-amber-500/5" role="status">
+              <p className="text-sm font-semibold text-ink">Some market data may be incomplete</p>
+              <ul className="mt-1 list-disc pl-5 text-xs text-muted">
+                {overview.data?.warnings?.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            </Card>
+          )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <SnapshotCard title="Top movers" value={snapshots.trending} icon={TrendingUp} />
             <SnapshotCard
@@ -311,19 +349,15 @@ export default function IndianMarketPage() {
           <div className="grid gap-3 lg:grid-cols-2">
             <Card>
               <CardTitle>Analyst recommendations</CardTitle>
-              <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">
-                {JSON.stringify(
-                  data.recommendations.data?.data ?? "No recommendation data",
-                  null,
-                  2,
-                )}
-              </pre>
+              {data.recommendations.isLoading ? <LoadingState>Loading recommendations…</LoadingState> : data.recommendations.isError ? (
+                <p className="mt-3 text-sm text-muted">Recommendations are unavailable for this stock.</p>
+              ) : <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">{JSON.stringify(data.recommendations.data?.data ?? "No recommendation data", null, 2)}</pre>}
             </Card>
             <Card>
               <CardTitle>Forecasts</CardTitle>
-              <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">
-                {JSON.stringify(data.forecasts.data?.data ?? "No forecast data", null, 2)}
-              </pre>
+              {data.forecasts.isLoading ? <LoadingState>Loading forecasts…</LoadingState> : data.forecasts.isError ? (
+                <p className="mt-3 text-sm text-muted">Forecasts are unavailable for this stock.</p>
+              ) : <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">{JSON.stringify(data.forecasts.data?.data ?? "No forecast data", null, 2)}</pre>}
             </Card>
           </div>
         </>
