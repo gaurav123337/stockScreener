@@ -84,3 +84,18 @@ The end-to-end feedback path is complete in the working tree and coordinated wit
 - Added explicit missing-configuration and rejected-provider diagnostics while preserving feedback before notification delivery.
 - Updated the Render Blueprint to request `RESEND_API_KEY` and a verified `SCREENER_FEEDBACK_EMAIL_FROM` sender.
 - Retained the SMTP adapter for non-Render deployments, but the application bootstrap now selects Resend.
+
+## API-First Feedback Retrieval and Editor Overlap Fix – 2026-07-31
+
+**Timestamp:** **2026-07-31T16:18:00Z (UTC) | 31-07-2026 21:48:00 (IST)**
+
+- Removed email notifier registration from the application bootstrap. Feedback submission no longer depends on Gmail, SMTP, Resend, or any other outbound email provider.
+- Kept `POST /api/feedback` as the public submission API. It persists validated feedback in `data/feedback.db` before returning the receipt.
+- Kept `GET /api/admin/feedback` and `GET /api/admin/feedback/{feedback_id}` as the Product Owner inbox and detail API. These endpoints require Product Owner authentication, so feedback is not exposed publicly.
+- Removed the duplicate TipTap CSS pseudo-placeholder. The React placeholder in `RichTextField` is now the sole Details placeholder, preventing overlapping text.
+
+### Completion Summary
+
+- Runtime wiring now uses `FeedbackService` with SQLite persistence only; existing notification adapters remain available as isolated legacy code but are not invoked.
+- Removed obsolete Render email environment variables from `render.yaml`.
+- Updated the feedback workflow documentation and conversation log to describe the API-backed operational flow.

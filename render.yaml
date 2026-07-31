@@ -9,12 +9,6 @@ services:
     envVars:
       - key: SCREENER_ENVIRONMENT
         value: production
-      - key: SCREENER_FEEDBACK_EMAIL_TO
-        value: garudagaura@gmail.com
-      - key: SCREENER_FEEDBACK_EMAIL_FROM
-        value: onboarding@resend.dev
-      - key: RESEND_API_KEY
-        sync: false
       # Set this to the already-registered, verified Product Owner email in Render.
       # Public registration intentionally always creates a normal user.
       - key: SCREENER_PRODUCT_OWNER_EMAIL

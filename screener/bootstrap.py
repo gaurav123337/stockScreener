@@ -7,13 +7,11 @@ from __future__ import annotations
 from screener.core.config import config
 from screener.core.container import container
 from screener.core.interfaces import (
-    FeedbackNotifier,
     KnowledgeStore,
     MarketDataProvider,
     PredictionRepository,
 )
 from screener.infrastructure.data.yahoo_provider import YahooDataProvider
-from screener.infrastructure.notifications import ResendFeedbackNotifier
 from screener.infrastructure.persistence.csv_repository import (
     CSVPredictionRepository,
     MarkdownKnowledgeStore,
@@ -46,8 +44,6 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(MarketDataProvider, YahooDataProvider)
     container.register(PredictionRepository, CSVPredictionRepository)
     container.register(KnowledgeStore, MarkdownKnowledgeStore)
-    container.register(FeedbackNotifier, factory=ResendFeedbackNotifier.from_environment)
-
     # Services
     container.register(AnalysisService, AnalysisService)
     container.register(ScanService, ScanService)
@@ -56,10 +52,9 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(FilterService, FilterService)
     container.register(BrokerService, BrokerService)
     container.register(ControlCenterService, ControlCenterService)
-    container.register(
-        FeedbackService,
-        factory=lambda: FeedbackService(notifier=container.resolve(FeedbackNotifier)),
-    )
+    # Feedback is persisted to SQLite and retrieved through the protected
+    # Product Owner API. Email is intentionally not part of the request path.
+    container.register(FeedbackService, FeedbackService)
     container.register(AuthService, AuthService)
     container.register(PreferencesService, PreferencesService)
 
