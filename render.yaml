@@ -15,3 +15,10 @@ services:
         value: onboarding@resend.dev
       - key: RESEND_API_KEY
         sync: false
+      # Set this to the already-registered, verified Product Owner email in Render.
+      # Public registration intentionally always creates a normal user.
+      - key: SCREENER_PRODUCT_OWNER_EMAIL
+        sync: false
+      # Required only when the account does not exist yet. Use 12-128 characters.
+      - key: SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD
+        sync: false

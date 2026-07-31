@@ -126,6 +126,10 @@ Open **http://localhost:8000** in a browser. It's a single-page app with 6 tabs:
 - **Brokers** — connect **Zerodha Kite** or **Angel One SmartAPI** (step-by-step instructions in-app) for live LTP and your holdings/positions. Optional — the app works fine on free data.
 - **Guide** — how to use everything.
 
+### Product Owner setup
+
+Public registration always creates a normal user; Product Owner access is intentionally not self-selectable. To create the first Product Owner profile, configure `SCREENER_PRODUCT_OWNER_EMAIL` and a strong `SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD` before starting the API. The deployment-owned startup bootstrap creates a verified Product Owner account if it does not exist. An already-registered account must be verified before it can be promoted. See [DEPLOYMENT.md](DEPLOYMENT.md#create-the-first-product-owner-profile) for the local and Render steps.
+
 ### ⚛️ Frontend development (React + Vite + TypeScript)
 
 The SPA lives in `frontend/` and is a React 18 + Vite + TypeScript app

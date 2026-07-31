@@ -13,7 +13,7 @@ from uuid import uuid4
 from screener.core.config import AppConfig, config
 from screener.core.feedback_models import FeedbackWorkflowUpdate
 from screener.core.responses import NotFoundError, ValidationError
-from screener.core.user_models import UserRecord, UserStore, user_store
+from screener.core.user_models import UserRecord, UserStore, hash_password, user_store
 from screener.infrastructure.persistence.feedback_store import FeedbackStore
 
 
@@ -141,7 +141,37 @@ class ControlCenterService:
             return
         user = self._users.get_by_id(user_id) if user_id else self._users.get_by_email(email)
         if not user:
-            raise RuntimeError("Configured product-owner account was not found")
+            password = os.getenv("SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD", "")
+            if user_id or not password:
+                raise RuntimeError(
+                    "Configured product-owner account was not found; register and verify it first, "
+                    "or configure SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD with the email bootstrap"
+                )
+            if email.count("@") != 1 or "." not in email.rsplit("@", 1)[-1]:
+                raise RuntimeError("SCREENER_PRODUCT_OWNER_EMAIL must be a valid email address")
+            if not 12 <= len(password) <= 128:
+                raise RuntimeError(
+                    "SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD must be between 12 and 128 characters"
+                )
+            username = os.getenv("SCREENER_PRODUCT_OWNER_USERNAME", "").strip().lower()
+            username = username or email.split("@", 1)[0]
+            if self._users.get_by_username(username):
+                username = f"{username[:35]}-owner-{uuid4().hex[:8]}"
+            password_hash, password_salt = hash_password(password)
+            user = self._users.create_user(UserRecord(
+                user_id=str(uuid4()),
+                username=username,
+                email=email,
+                normalized_email=email,
+                display_name=os.getenv("SCREENER_PRODUCT_OWNER_DISPLAY_NAME", "").strip() or "Product Owner",
+                password_hash=password_hash,
+                password_salt=password_salt,
+                email_verified_at=datetime.now(timezone.utc),
+                role="product_owner",
+            ))
+            if not user:
+                raise RuntimeError("Product-owner bootstrap account could not be created")
+            return
         if not user.email_verified_at:
             raise RuntimeError("Configured product-owner account must have a verified email")
         if user and user.role != "product_owner":
