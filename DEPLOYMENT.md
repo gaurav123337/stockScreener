@@ -32,10 +32,34 @@ No secrets are required for market-data access. Feedback email uses the Resend H
 
 - `RESEND_API_KEY`: an API key created in the Resend dashboard.
 - `SCREENER_FEEDBACK_EMAIL_FROM`: a verified Resend sender, such as `Stock Screener <feedback@your-domain.example>`.
+- `SCREENER_PRODUCT_OWNER_EMAIL`: the email address of the account that should receive Product Owner access. This is prompted as a secret/unmanaged value so it is not committed to Git.
+- `SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD`: a strong 12-128 character password used only if the configured Product Owner account does not exist yet. Keep it in Render's secret environment settings, never in Git.
 
 Verify the sender domain in Resend before deploying, then enter both values in Render. The recipient remains `garudagaura@gmail.com` in `render.yaml`. If email configuration is missing or delivery fails, feedback is still persisted and available in the Product Owner control center; inspect Render logs for `email notification failed` and the Resend error response.
 
 Render injects `PORT`; the container start command uses it automatically.
+
+## Create the first Product Owner profile
+
+Product Owner is an elevated role and cannot be selected during public registration. For a new Render deployment, use the deployment-owned bootstrap flow:
+
+1. In Render's **Environment** settings, set `SCREENER_PRODUCT_OWNER_EMAIL` to the Product Owner's email.
+2. Set `SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD` to a unique password between 12 and 128 characters.
+3. Deploy or restart the service. If the account does not exist, startup creates it as an email-verified `product_owner`. Sign in with those credentials and open `/control-center`.
+
+The bootstrap is idempotent: later restarts find the same account and do not reset its password. Keep both values in Render because the free service's ephemeral filesystem can lose its SQLite database during a redeploy.
+
+For an account that was already registered, do not set the initial-password variable. Verify the account first, then configure its email and restart. Locally, verification links are written to `data/auth_email_outbox.jsonl` because auth-email delivery is currently a development capture adapter.
+
+Local direct bootstrap example:
+
+   ```powershell
+   $env:SCREENER_PRODUCT_OWNER_EMAIL = "owner@example.com"
+   $env:SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD = "use-a-unique-long-password"
+   python api.py
+   ```
+
+If startup reports `Configured product-owner account must have a verified email`, verify the pre-existing account or use a different email for deployment-owned creation. If it reports that the account was not found, either register and verify it or supply the initial password. Existing unverified accounts are never auto-promoted, preventing someone from pre-registering a known administrator email and gaining elevated access.
 
 ## Validate The Deployment
 

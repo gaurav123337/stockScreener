@@ -233,6 +233,39 @@ class ControlCenterSecurityTests(unittest.TestCase):
         with self.assertRaises(AuthError):
             self.auth.get_user_from_token(result.token)
 
+    def test_bootstrap_creates_verified_product_owner_from_deployment_credentials(self):
+        environment = {
+            "SCREENER_PRODUCT_OWNER_EMAIL": "new-owner@example.com",
+            "SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD": "unique-owner-password",
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            self.control.bootstrap_product_owner()
+            self.control.bootstrap_product_owner()
+
+        owner = self.users.get_by_email("new-owner@example.com")
+        self.assertIsNotNone(owner)
+        self.assertEqual("product_owner", owner.role)
+        self.assertIsNotNone(owner.email_verified_at)
+        self.assertEqual(
+            owner.user_id,
+            self.auth.login(UserLogin(
+                email="new-owner@example.com",
+                password="unique-owner-password",
+            )).user.user_id,
+        )
+        self.assertEqual(1, len([
+            user for user in self.users.list_users()
+            if user.normalized_email == "new-owner@example.com"
+        ]))
+
+    def test_bootstrap_rejects_short_initial_product_owner_password(self):
+        with patch.dict(os.environ, {
+            "SCREENER_PRODUCT_OWNER_EMAIL": "new-owner@example.com",
+            "SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD": "too-short",
+        }, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "between 12 and 128"):
+                self.control.bootstrap_product_owner()
+
     def test_feedback_migration_preserves_legacy_records(self):
         legacy_path = Path(self.temp.name) / "legacy-feedback.db"
         conn = sqlite3.connect(legacy_path)

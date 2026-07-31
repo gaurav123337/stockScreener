@@ -353,3 +353,26 @@ Complete the Product Owner Dashboard stories `PO-01` and `PO-02` using the exist
 - Added compatible user and feedback list filters for all dashboard drill-down links.
 - Added focused coverage for metrics, guest attribution, recent ordering, publications, and drill-down filter semantics.
 - Quality gates passed: 23 backend tests, frontend lint, frontend TypeScript check, and frontend production build.
+
+## Update - 31 July 2026: Product Owner Profile Bootstrap
+
+**Timestamp:** **2026-07-31T15:35:00Z (UTC) | 31-07-2026 21:05:00 (IST)**
+
+### Root Cause
+
+Public registration correctly creates only normal users, but the existing Product Owner bootstrap required an already-registered and verified account. Production auth-email delivery is not yet implemented, and Render Free storage is ephemeral, so a new deployment had no reliable way to create the first verified Product Owner profile.
+
+### Implementation
+
+- Preserve the security boundary that prevents public self-assignment of elevated roles.
+- Allow deployment owners to seed the first Product Owner using `SCREENER_PRODUCT_OWNER_EMAIL` plus `SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD`.
+- Require a 12-128 character initial password, hash it with the existing password mechanism, mark only the deployment-created account verified, and make startup idempotent.
+- Continue requiring email verification before promoting any pre-existing account, preventing pre-registration takeover.
+- Declare both variables in `render.yaml`, document local/Render setup and ephemeral-storage behavior, and add focused bootstrap tests.
+
+### Success Criteria
+
+- A clean deployment can create and sign into exactly one Product Owner account using environment-managed credentials.
+- Repeated startup does not duplicate the account or reset its password.
+- Public registration still cannot request `product_owner` access.
+- Existing unverified accounts cannot be promoted through the deployment email variable alone.
