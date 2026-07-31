@@ -17,3 +17,5 @@
 **Assistant**: Added a secure, idempotent deployment bootstrap for the first Product Owner profile. See the 31 July update in `PRODUCT_OWNER_CONTROL_CENTER_IMPLEMENTATION_PLAN_20260730.md` and the setup steps in `DEPLOYMENT.md`.
 
 **Assistant**: Replaced runtime feedback email delivery with API-first SQLite persistence and Product Owner retrieval through `/api/admin/feedback`. Removed obsolete Render email configuration and fixed the Details field overlap by removing its duplicate CSS pseudo-placeholder. See the 31 July update in `FEEDBACK_FORM_IMPLEMENTATION_PLAN_20260730.md`.
+
+**Assistant**: Added persisted increase/decrease text-size controls for accessibility, fixed emoji picker selection retention and layout, and added lazy-route Suspense fallbacks to prevent the first-click Product Owner Control Center navigation crash. See the 31 July update in `FEEDBACK_FORM_IMPLEMENTATION_PLAN_20260730.md`.
