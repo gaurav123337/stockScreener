@@ -92,8 +92,4 @@ html.light {
     @apply text-focus underline;
   }
 
-  .feedback-editor p:first-child:only-child::before {
-    content: "Describe your experience and highlight important concerns…";
-    @apply pointer-events-none float-left h-0 text-muted;
-  }
 }
