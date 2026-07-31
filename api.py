@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import traceback
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -669,32 +670,43 @@ def indian_market_status(user: UserProfile = Depends(require_product_owner)):
 
 
 @app.get("/api/indian-market/stock")
-def indian_stock(q: str = "", user: UserProfile = Depends(get_current_user)):
+def indian_stock(q: str = "", user: UserProfile = Depends(require_auth)):
     return _indian_market().stock(q)
 
 
 @app.get("/api/indian-market/industry-search")
-def indian_industry_search(q: str = "", user: UserProfile = Depends(get_current_user)):
+def indian_industry_search(q: str = "", user: UserProfile = Depends(require_auth)):
     return _indian_market().search("industry_search", q)
 
 
 @app.get("/api/indian-market/mutual-funds/search")
-def indian_mutual_fund_search(q: str = "", user: UserProfile = Depends(get_current_user)):
+def indian_mutual_fund_search(q: str = "", user: UserProfile = Depends(require_auth)):
     return _indian_market().search("mutual_fund_search", q)
 
 
 @app.get("/api/indian-market/overview")
-def indian_overview(user: UserProfile = Depends(get_current_user)):
+def indian_overview(user: UserProfile = Depends(require_auth)):
     service = _indian_market()
+    snapshots: dict[str, Any] = {}
+    warnings: list[str] = []
+    fetched_at: str | None = None
+    for endpoint in (
+        "trending", "52_week_high_low", "nse_most_active",
+        "bse_most_active", "price_shockers", "commodities",
+    ):
+        try:
+            result = service.snapshot(endpoint)
+            snapshots[endpoint] = result["data"]
+            fetched_at = fetched_at or result["fetched_at"]
+            warnings.extend(result.get("warnings", []))
+        except DataSourceError as exc:
+            warnings.append(f"{endpoint}: {exc}")
     return {
+        "data": {"snapshots": snapshots},
         "provider": "indian_api",
-        "snapshots": {
-            endpoint: service.snapshot(endpoint)
-            for endpoint in (
-                "trending", "52_week_high_low", "nse_most_active",
-                "bse_most_active", "price_shockers", "commodities",
-            )
-        },
+        "fetched_at": fetched_at or datetime.now(timezone.utc).isoformat(),
+        "stale": False,
+        "warnings": warnings,
     }
 
 
@@ -703,7 +715,7 @@ def indian_history(
     stock_id: str,
     period: str = "1Y",
     filter: str = "price",
-    user: UserProfile = Depends(get_current_user),
+    user: UserProfile = Depends(require_auth),
 ):
     if len(period) > 20 or len(filter) > 50:
         raise ValidationError("Invalid historical query parameters")
@@ -714,7 +726,7 @@ def indian_history(
 def indian_stats(
     stock_id: str,
     stats: str = "",
-    user: UserProfile = Depends(get_current_user),
+    user: UserProfile = Depends(require_auth),
 ):
     if len(stats) > 100:
         raise ValidationError("Invalid stats query parameter")
@@ -722,7 +734,7 @@ def indian_stats(
 
 
 @app.get("/api/indian-market/stock/{stock_id}/recommendations")
-def indian_recommendations(stock_id: str, user: UserProfile = Depends(get_current_user)):
+def indian_recommendations(stock_id: str, user: UserProfile = Depends(require_auth)):
     return _indian_market().analysis("stock_target_price", stock_id)
 
 
@@ -733,7 +745,7 @@ def indian_forecasts(
     period_type: str = "",
     data_type: str = "",
     age: str = "",
-    user: UserProfile = Depends(get_current_user),
+    user: UserProfile = Depends(require_auth),
 ):
     query = {key: value for key, value in {
         "measure_code": measure_code, "period_type": period_type,

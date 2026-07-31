@@ -296,6 +296,9 @@ export interface IndianStock {
 export type IndianRecord = Record<string, unknown>;
 export type IndianSearchResult = IndianRecord;
 export type IndianSnapshot = IndianRecord[] | IndianRecord | null;
+export interface IndianOverview {
+  snapshots: Record<string, IndianSnapshot>;
+}
 export interface IndianHistory {
   stock_id: string;
   points: IndianRecord[];

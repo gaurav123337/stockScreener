@@ -1,3 +1,5 @@
+**Assistant (2026-08-01):** Completed the remaining code-owned Indian API integration work; see `INDIAN_API_INTEGRATION_IMPLEMENTATION_PLAN_20260731.md` for envelope, authentication, resilience, deployment, UI, and validation details.
+
 **Assistant**: Created implementation plan for predefined filter restoration, prominent boolean checkboxes, and knowledge-base error handling. See `FILTERS_CHECKBOXES_KNOWLEDGE_FIX_IMPLEMENTATION_PLAN_20260730.md`.
 
 # Conversation Log

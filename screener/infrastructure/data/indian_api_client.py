@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -51,6 +52,8 @@ class IndianApiClient(IndianMarketGateway):
         self.session = session or requests.Session()
         self._cache: dict[tuple[str, tuple[tuple[str, str], ...]], tuple[float, Any]] = {}
         self._cache_lock = threading.Lock()
+        self._request_times: deque[float] = deque()
+        self._rate_lock = threading.Lock()
         self._telemetry = IndianApiTelemetry()
         self._telemetry_lock = threading.Lock()
 
@@ -81,6 +84,9 @@ class IndianApiClient(IndianMarketGateway):
             if cached and now - cached[0] < self.settings.cache_ttl_seconds:
                 self._record(cache_hits=1)
                 return cached[1]
+            if cached:
+                self._cache.pop(cache_key, None)
+            self._evict_expired_cache(now)
         request_params = dict(params or {})
         headers = {"Accept": "application/json", "User-Agent": "stockScreener/indian-market"}
         if self.settings.api_key:
@@ -89,6 +95,7 @@ class IndianApiClient(IndianMarketGateway):
         url = f"{self.settings.base_url.rstrip('/')}{meta.path}"
         last_error: Exception | None = None
         for attempt in range(self.settings.retry_attempts + 1):
+            self._wait_for_rate_limit(time.monotonic())
             started_at = time.monotonic()
             self._record(requests=1)
             try:
@@ -101,6 +108,9 @@ class IndianApiClient(IndianMarketGateway):
                     raise DataSourceError("Indian market API rate limit reached")
                 if response.status_code >= 400:
                     self._record(errors=1, last_error=f"http_{response.status_code}")
+                    if response.status_code >= 500 and attempt < self.settings.retry_attempts:
+                        time.sleep(min(0.25 * (2 ** attempt), 2.0))
+                        continue
                     raise DataSourceError(f"Indian market API returned HTTP {response.status_code}")
                 payload = response.json()
                 previous_successes = self.telemetry().successes
@@ -118,6 +128,29 @@ class IndianApiClient(IndianMarketGateway):
                 if attempt < self.settings.retry_attempts:
                     time.sleep(min(0.25 * (2 ** attempt), 2.0))
         raise DataSourceError("Indian market API request failed") from last_error
+
+    def _evict_expired_cache(self, now: float) -> None:
+        ttl = self.settings.cache_ttl_seconds
+        if ttl <= 0:
+            self._cache.clear()
+            return
+        self._cache = {
+            key: value for key, value in self._cache.items() if now - value[0] < ttl
+        }
+
+    def _wait_for_rate_limit(self, now: float) -> None:
+        limit = self.settings.rate_limit_per_minute
+        while True:
+            with self._rate_lock:
+                cutoff = now - 60.0
+                while self._request_times and self._request_times[0] <= cutoff:
+                    self._request_times.popleft()
+                if len(self._request_times) < limit:
+                    self._request_times.append(now)
+                    return
+                wait = max(0.01, 60.0 - (now - self._request_times[0]))
+            time.sleep(wait)
+            now = time.monotonic()
 
     def stock(self, name: str) -> StockSummary:
         payload = self._request("stock", {"name": name.strip()})

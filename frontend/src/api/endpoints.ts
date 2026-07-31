@@ -17,8 +17,8 @@ import type {
   HoldingsResponse,
   IndianEnvelope,
   IndianHistory,
+  IndianOverview,
   IndianSearchResult,
-  IndianSnapshot,
   IndianStats,
   IndianStock,
   KnowledgeResponse,
@@ -164,7 +164,7 @@ export const api = {
     http.get<IndianEnvelope<IndianSearchResult[]>>(
       `/api/indian-market/mutual-funds/search?q=${encodeURIComponent(query)}`,
     ),
-  indianOverview: () => http.get<IndianEnvelope<IndianSnapshot>>("/api/indian-market/overview"),
+  indianOverview: () => http.get<IndianEnvelope<IndianOverview>>("/api/indian-market/overview"),
   indianHistory: (stockId: string, period = "", filter = "") => {
     const params = new URLSearchParams();
     if (period) params.set("period", period);

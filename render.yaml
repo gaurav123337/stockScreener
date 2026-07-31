@@ -21,7 +21,7 @@ services:
         value: "false"
       - key: SCREENER_INDIAN_API_BASE_URL
         sync: false
-      - key: SCREENER_INDIAN_API_API_KEY
+      - key: SCREENER_INDIAN_API_KEY
         sync: false
       - key: SCREENER_INDIAN_API_AUTH_HEADER
         value: X-Api-Key

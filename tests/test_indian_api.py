@@ -19,6 +19,10 @@ class FakeResponse:
     def json(self):
         return self.payload
 
+    @property
+    def headers(self):
+        return {}
+
 
 class FakeSession:
     def __init__(self, response: FakeResponse):
@@ -147,3 +151,56 @@ def test_configurable_bearer_auth_and_redacted_rollout_status(monkeypatch):
     assert status["configured"] is True
     assert "secret-do-not-return" not in repr(status)
     assert status["telemetry"]["successes"] == 1
+
+
+def test_transient_server_errors_are_retried():
+    session = FakeSession(FakeResponse({}, status_code=503))
+    api = client(session, retry_attempts=2)
+    with pytest.raises(DataSourceError, match="HTTP 503"):
+        api.snapshot("trending")
+    assert len(session.calls) == 3
+
+
+def test_rate_limit_window_is_enforced_without_waiting(monkeypatch):
+    api = client(FakeSession(FakeResponse([])), rate_limit_per_minute=1)
+    sleeps: list[float] = []
+    monkeypatch.setattr("screener.infrastructure.data.indian_api_client.time.monotonic", lambda: 160.0)
+    monkeypatch.setattr("screener.infrastructure.data.indian_api_client.time.sleep", sleeps.append)
+    api._wait_for_rate_limit(100.0)
+    api._wait_for_rate_limit(100.0)
+    assert sleeps == [60.0]
+
+
+def test_indian_overview_returns_one_stable_envelope(monkeypatch):
+    import api as api_module
+
+    class FakeOverviewService:
+        def snapshot(self, endpoint):
+            if endpoint == "commodities":
+                raise DataSourceError("temporarily unavailable")
+            return {
+                "data": [{"endpoint": endpoint}],
+                "provider": "indian_api",
+                "fetched_at": "2026-07-31T00:00:00+00:00",
+                "stale": False,
+                "warnings": [],
+            }
+
+    monkeypatch.setattr(api_module, "_indian_market", lambda: FakeOverviewService())
+    result = api_module.indian_overview()
+    assert result["data"]["snapshots"]["trending"] == [{"endpoint": "trending"}]
+    assert "commodities" not in result["data"]["snapshots"]
+    assert result["provider"] == "indian_api"
+    assert result["warnings"] == ["commodities: temporarily unavailable"]
+
+
+def test_indian_routes_require_strict_authentication():
+    import api as api_module
+
+    route = next(
+        route for route in api_module.app.routes
+        if getattr(route, "path", None) == "/api/indian-market/overview"
+    )
+    dependencies = [dependency.call for dependency in route.dependant.dependencies]
+    assert api_module.require_auth in dependencies
+    assert api_module.get_current_user not in dependencies

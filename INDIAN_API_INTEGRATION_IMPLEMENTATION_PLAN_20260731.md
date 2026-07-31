@@ -456,3 +456,33 @@ Yahoo Finance remains unchanged as the primary market-data provider.
 The repository is rollout-ready, but live activation is intentionally blocked
 until a real provider key, official auth convention, and terms confirmation are
 available. No live provider call was made from this development environment.
+
+## Update – Remaining code-owned work completed (2026-08-01)
+
+- Corrected the Render secret name to `SCREENER_INDIAN_API_KEY`, matching the
+  `IndianApiConfig` environment prefix and field name.
+- Standardized `/api/indian-market/overview` on the same stable envelope used
+  by the other routes: `data`, `provider`, `fetched_at`, `stale`, and
+  `warnings`. Individual snapshot failures now degrade to warnings rather than
+  discarding the complete overview.
+- Required authenticated users for every market-data route so anonymous guest
+  traffic cannot consume the provider quota; rollout telemetry remains
+  Product Owner-only.
+- Added proactive per-process request throttling, expired-cache eviction, and
+  retries for transient HTTP 5xx responses to the infrastructure adapter.
+- Aligned the frontend overview type and renderer with the backend envelope and
+  stopped industry/mutual-fund discovery selections from being treated as
+  stock identifiers.
+- Added regression tests for transient retries, rate-limit windows, overview
+  degradation, and strict route authentication.
+
+### Validation status
+
+- Frontend TypeScript typecheck and strict ESLint validation pass.
+- Python source compilation and focused dependency-free checks are used in the
+  current environment because `pytest` is not installed locally; the added
+  tests remain part of `tests/test_indian_api.py` for the normal test image.
+- Live Phase-0/Phase-4 compatibility checks remain intentionally blocked on an
+  official base URL, API key, authentication convention, terms, and sanitized
+  fixtures. No production provider activation or Yahoo-flow replacement was
+  attempted.

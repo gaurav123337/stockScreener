@@ -125,13 +125,7 @@ export default function IndianMarketPage() {
   );
   const data = useIndianStockData(stockId, period, "");
   const stockData = stock.data?.data as IndianStock | undefined;
-  const snapshots = useMemo(
-    () =>
-      overview.data?.data && typeof overview.data.data === "object"
-        ? (overview.data.data as IndianRecord)
-        : {},
-    [overview.data],
-  );
+  const snapshots = useMemo(() => overview.data?.data.snapshots ?? {}, [overview.data]);
   const refresh = () => {
     void overview.refetch();
     if (stockId) {
@@ -141,6 +135,7 @@ export default function IndianMarketPage() {
   };
 
   const openSelection = () => {
+    if (mode !== "stock") return;
     const nextStockId = stockData?.ticker_id || query.trim();
     if (nextStockId) setStockId(nextStockId);
   };
@@ -178,7 +173,7 @@ export default function IndianMarketPage() {
             fullWidth={false}
             variant="secondary"
             onClick={openSelection}
-            disabled={!query.trim() && !stockData?.ticker_id}
+            disabled={mode !== "stock" || (!query.trim() && !stockData?.ticker_id)}
           >
             <Search className="size-4" aria-hidden />
             Open
@@ -206,10 +201,7 @@ export default function IndianMarketPage() {
                 type="button"
                 className="rounded-lg border border-border bg-surface p-3 text-left text-sm text-ink hover:border-focus"
                 onClick={() => {
-                  setQuery(displayValue(item.name ?? item.companyName ?? item.symbol));
-                  if (item.id ?? item.tickerId ?? item.code) {
-                    setStockId(displayValue(item.id ?? item.tickerId ?? item.code));
-                  }
+                   setQuery(displayValue(item.name ?? item.companyName ?? item.symbol));
                 }}
               >
                 {displayValue(item.name ?? item.companyName ?? item.symbol)}
