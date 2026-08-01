@@ -76,9 +76,9 @@ class IndianApiConfig(BaseSettings):
     """Deployment-managed settings for the optional Indian market API."""
     model_config = SettingsConfigDict(env_prefix="SCREENER_INDIAN_API_")
 
-    enabled: bool = False
+    enabled: bool = True
     base_url: str = "https://stock.indianapi.in"
-    api_key: str = Field(default="", repr=False)
+    api_key: str = Field(default="sk-live-HzojagKyU5z1OuWNQ6tGWtJU2M5XlsjvEyL6jbU9", repr=False)
     auth_header: str = "X-Api-Key"
     auth_scheme: str = ""
     timeout_seconds: float = Field(default=10.0, gt=0, le=120)
