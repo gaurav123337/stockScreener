@@ -486,3 +486,19 @@ available. No live provider call was made from this development environment.
   official base URL, API key, authentication convention, terms, and sanitized
   fixtures. No production provider activation or Yahoo-flow replacement was
   attempted.
+
+## Update – Free-plan compatibility (2026-08-01)
+
+**Timestamp:** **2026-07-31T20:23:11Z (UTC) | 01-08-2026 01:53:11 (IST)**
+
+- Confirmed the official Free-plan base URL (`https://stock.indianapi.in`) and
+  `X-Api-Key` authentication from the provider documentation index.
+- Limited the active client surface to endpoints documented for Free/Hobby;
+  history, historical stats, and forecasts now fail locally with a clear
+  dedicated-plan message instead of spending provider quota on invalid calls.
+- Removed unsupported history, stats, and forecast queries/panels from the
+  Free-plan UI while retaining analyst target-price recommendations.
+- Added mappings for Free-plan industry fields (`commonName`,
+  `exchangeCodeNsi`, and `exchangeCodeBse`) and nested trending gainers/losers.
+- Added regression coverage for the official default host and dedicated-only
+  endpoint guards. Yahoo remains the default provider for the existing screener.

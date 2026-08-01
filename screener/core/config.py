@@ -77,7 +77,7 @@ class IndianApiConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SCREENER_INDIAN_API_")
 
     enabled: bool = False
-    base_url: str = ""
+    base_url: str = "https://stock.indianapi.in"
     api_key: str = Field(default="", repr=False)
     auth_header: str = "X-Api-Key"
     auth_scheme: str = ""

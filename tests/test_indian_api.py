@@ -90,6 +90,19 @@ def test_disabled_and_http_errors_are_structured():
     assert len(session.calls) == 1
 
 
+def test_free_plan_defaults_to_official_host_and_blocks_dedicated_endpoints():
+    settings = IndianApiConfig(enabled=True, api_key="secret")
+    api = IndianApiClient(settings, FakeSession(FakeResponse({})))
+
+    assert settings.base_url == "https://stock.indianapi.in"
+    with pytest.raises(DataSourceError, match="dedicated-server plan"):
+        api.history("RELIANCE")
+    with pytest.raises(DataSourceError, match="dedicated-server plan"):
+        api.historical_stats("RELIANCE")
+    with pytest.raises(DataSourceError, match="dedicated-server plan"):
+        api.analysis("stock_forecasts", "RELIANCE")
+
+
 class FakeGateway:
     def stock(self, name):
         return {"name": name}
