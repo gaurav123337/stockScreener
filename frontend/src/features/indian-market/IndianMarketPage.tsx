@@ -19,6 +19,15 @@ function asRecords(value: IndianSnapshot | unknown): IndianRecord[] {
   return [];
 }
 
+function trendingRows(value: IndianSnapshot | unknown): IndianRecord[] {
+  const rows = asRecords(value);
+  if (rows.length !== 1) return rows;
+  const trending = rows[0].trending_stocks;
+  if (!trending || typeof trending !== "object" || Array.isArray(trending)) return rows;
+  const groups = trending as IndianRecord;
+  return [...asRecords(groups.top_gainers), ...asRecords(groups.top_losers)];
+}
+
 function displayValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "object") return JSON.stringify(value);
@@ -38,12 +47,14 @@ function SnapshotCard({
   title,
   value,
   icon: Icon,
+  records = asRecords,
 }: {
   title: string;
   value: unknown;
   icon: typeof TrendingUp;
+  records?: (value: unknown) => IndianRecord[];
 }) {
-  const rows = asRecords(value);
+  const rows = records(value);
   return (
     <Card>
       <CardTitle className="flex items-center gap-2 text-base">
@@ -54,7 +65,12 @@ function SnapshotCard({
         <ul className="mt-3 space-y-2 text-sm">
           {rows.slice(0, 5).map((row, index) => {
             const label =
-              row.name ?? row.companyName ?? row.symbol ?? row.tickerId ?? `Item ${index + 1}`;
+              row.name ??
+              row.companyName ??
+              row.commonName ??
+              row.symbol ??
+              row.tickerId ??
+              `Item ${index + 1}`;
             const numeric = row.percentChange ?? row.change ?? row.currentPrice ?? row.price;
             return (
               <li
@@ -201,20 +217,29 @@ export default function IndianMarketPage() {
                 type="button"
                 className="rounded-lg border border-border bg-surface p-3 text-left text-sm text-ink hover:border-focus"
                 onClick={() => {
-                   setQuery(displayValue(item.name ?? item.companyName ?? item.symbol));
+                  setQuery(
+                    displayValue(item.name ?? item.companyName ?? item.commonName ?? item.symbol),
+                  );
                 }}
               >
-                {displayValue(item.name ?? item.companyName ?? item.symbol)}
+                {displayValue(item.name ?? item.companyName ?? item.commonName ?? item.symbol)}
                 <span className="block text-xs text-muted">
-                  {displayValue(item.id ?? item.tickerId ?? item.code)}
+                  {displayValue(
+                    item.id ?? item.tickerId ?? item.exchangeCodeNsi ?? item.exchangeCodeBse ?? item.code,
+                  )}
                 </span>
               </button>
             ))}
           </div>
         )}
-        {mode !== "stock" && !discovery.isFetching && debouncedQuery && discovery.data?.data?.length === 0 && (
-          <p className="mt-3 text-sm text-muted">No matching {mode === "industry" ? "industries" : "mutual funds"} found.</p>
-        )}
+        {mode !== "stock" &&
+          !discovery.isFetching &&
+          debouncedQuery &&
+          discovery.data?.data?.length === 0 && (
+            <p className="mt-3 text-sm text-muted">
+              No matching {mode === "industry" ? "industries" : "mutual funds"} found.
+            </p>
+          )}
         {stock.isError && (
           <p className="mt-3 text-sm text-danger">
             Company lookup failed. The provider may be disabled or unavailable.
@@ -241,7 +266,12 @@ export default function IndianMarketPage() {
             </Card>
           )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <SnapshotCard title="Top movers" value={snapshots.trending} icon={TrendingUp} />
+            <SnapshotCard
+              title="Top movers"
+              value={snapshots.trending}
+              icon={TrendingUp}
+              records={trendingRows}
+            />
             <SnapshotCard
               title="Most active NSE"
               value={snapshots.nse_most_active}
@@ -307,7 +337,7 @@ export default function IndianMarketPage() {
             </p>
           </Card>
           <div className="grid gap-3 lg:grid-cols-2">
-            <Card>
+          <Card>
               <div className="flex items-center justify-between">
                 <CardTitle>Price history</CardTitle>
                 <select
@@ -331,12 +361,12 @@ export default function IndianMarketPage() {
               <CardTitle>Historical stats</CardTitle>
               {data.stats.isLoading ? (
                 <LoadingState>Loading stats…</LoadingState>
-              ) : (
+            ) : (
                 <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap text-xs text-muted">
                   {JSON.stringify(data.stats.data?.data.stats ?? {}, null, 2)}
-                </pre>
-              )}
-            </Card>
+              </pre>
+            )}
+          </Card>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             <Card>

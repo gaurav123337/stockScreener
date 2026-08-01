@@ -1,3 +1,4 @@
+**Assistant**: Implemented IndianAPI Free-plan compatibility; updated the existing integration plan, guarded dedicated-only endpoints, and aligned Indian market UI response rendering.
 **Assistant (2026-08-01):** Completed the remaining code-owned Indian API integration work; see `INDIAN_API_INTEGRATION_IMPLEMENTATION_PLAN_20260731.md` for envelope, authentication, resilience, deployment, UI, and validation details.
 
 **Assistant**: Created implementation plan for predefined filter restoration, prominent boolean checkboxes, and knowledge-base error handling. See `FILTERS_CHECKBOXES_KNOWLEDGE_FIX_IMPLEMENTATION_PLAN_20260730.md`.

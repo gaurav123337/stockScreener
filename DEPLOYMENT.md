@@ -97,7 +97,7 @@ Finance. Configure these Render variables only after confirming the provider's
 current official authentication and terms:
 
 - `SCREENER_INDIAN_API_ENABLED=false` initially, then `true` for the preview.
-- `SCREENER_INDIAN_API_BASE_URL` and `SCREENER_INDIAN_API_API_KEY` as secrets.
+- `SCREENER_INDIAN_API_BASE_URL` and `SCREENER_INDIAN_API_KEY` as secrets.
 - `SCREENER_INDIAN_API_AUTH_HEADER` (default `X-Api-Key`).
 - `SCREENER_INDIAN_API_AUTH_SCHEME` (empty by default; use `Bearer` only if the
   provider requires it).
