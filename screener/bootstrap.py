@@ -13,6 +13,7 @@ from screener.core.interfaces import (
 )
 from screener.infrastructure.data.yahoo_provider import YahooDataProvider
 from screener.infrastructure.data.indian_api_client import IndianApiClient
+from screener.infrastructure.data.yahoo_indian_provider import YahooIndianProvider
 from screener.infrastructure.persistence.csv_repository import (
     CSVPredictionRepository,
     MarkdownKnowledgeStore,
@@ -26,6 +27,7 @@ from screener.services import (
     FilterService,
     KnowledgeService,
     PreferencesService,
+    RecommendationService,
     ScanService,
     VerificationService,
     IndianMarketService,
@@ -45,7 +47,7 @@ def bootstrap(environment: str | None = None) -> None:
 
     # Infrastructure
     container.register(MarketDataProvider, YahooDataProvider)
-    container.register(IndianMarketGateway, factory=lambda: IndianApiClient(config.indian_api))
+    container.register(IndianMarketGateway, factory=_indian_gateway)
     container.register(PredictionRepository, CSVPredictionRepository)
     container.register(KnowledgeStore, MarkdownKnowledgeStore)
     # Services
@@ -61,9 +63,21 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(FeedbackService, FeedbackService)
     container.register(AuthService, AuthService)
     container.register(PreferencesService, PreferencesService)
+    container.register(RecommendationService, RecommendationService)
     container.register(IndianMarketService, factory=lambda: IndianMarketService(get_service(IndianMarketGateway)))
 
 
 def get_service(service_type):
     """Convenience accessor for a service."""
     return container.resolve(service_type)
+
+
+def _indian_gateway():
+    """Build the Indian market adapter selected by configuration.
+
+    Both adapters implement the same core gateway contract, so swapping the
+    provider (e.g. indian_api -> yahoo) is a configuration change only.
+    """
+    if config.indian_market_provider == "yahoo":
+        return YahooIndianProvider(data_provider=get_service(MarketDataProvider))
+    return IndianApiClient(config.indian_api)

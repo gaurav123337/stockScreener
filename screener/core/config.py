@@ -16,6 +16,12 @@ from typing import Any, Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from screener import universe
+
+# Bumped whenever a persisted default changes meaning; used to migrate stale
+# `data/user_config.json` files created by older versions.
+_CONFIG_VERSION = 2
+
 
 class DataConfig(BaseSettings):
     """Data fetching configuration."""
@@ -26,6 +32,12 @@ class DataConfig(BaseSettings):
     retry_attempts: int = 2
     retry_pause_seconds: float = 1.0
     max_workers: int = 8
+    # Minimum rows of OHLCV history required before a symbol is analysable.
+    min_history_rows: int = 60
+    # Long-period fallback used when a symbol has insufficient 1y history.
+    fallback_period: str = "2y"
+    # Fundamentals change slowly; cache them this long to avoid re-scraping.
+    fundamentals_cache_ttl_seconds: int = 86_400
 
 
 class ScoringConfig(BaseSettings):
@@ -115,22 +127,18 @@ class AppConfig(BaseSettings):
     indian_api: IndianApiConfig = Field(default_factory=IndianApiConfig)
     market_data_provider: Literal["yahoo", "indian_api", "hybrid"] = "yahoo"
 
+    # Which adapter backs the Indian market workspace. Both providers conform
+    # to the same gateway contract, so this is the only switch that changes.
+    indian_market_provider: Literal["indian_api", "yahoo"] = "indian_api"
+
     # Environment
     environment: Literal["development", "production", "testing"] = "development"
     debug: bool = False
 
-    # Default symbol universe
+    # Default symbol universe — Nifty 500 (falls back to Nifty 50 if the
+    # vendored NSE constituents file is unavailable).
     default_universe: list[str] = Field(default_factory=lambda: [
-        "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK",
-        "BAJAJ-AUTO", "BAJAJFINSV", "BAJFINANCE", "BEL", "BHARTIARTL",
-        "BPCL", "BRITANNIA", "CIPLA", "COALINDIA", "DRREDDY",
-        "EICHERMOT", "GRASIM", "HCLTECH", "HDFCBANK", "HDFCLIFE",
-        "HEROMOTOCO", "HINDALCO", "HINDUNILVR", "ICICIBANK", "INDUSINDBK",
-        "INFY", "ITC", "JSWSTEEL", "KOTAKBANK", "LT",
-        "M&M", "MARUTI", "NESTLEIND", "NTPC", "ONGC",
-        "POWERGRID", "RELIANCE", "SBILIFE", "SBIN", "SHRIRAMFIN",
-        "SUNPHARMA", "TATACONSUM", "TATAMOTORS", "TATASTEEL", "TCS",
-        "TECHM", "TITAN", "TRENT", "ULTRACEMCO", "WIPRO",
+        *universe.default_universe(),
     ])
 
     @field_validator("data_dir", mode="before")
@@ -214,9 +222,28 @@ class AppConfig(BaseSettings):
             if self.user_config_file.exists():
                 saved = json.loads(self.user_config_file.read_text(encoding="utf-8"))
                 if isinstance(saved, dict) and saved:
+                    self._migrate(saved)
                     self._apply(saved)
+                    # Persist the migrated state so the fix is applied once.
+                    self._persist(saved)
         except Exception:
             pass  # corrupt file -> keep booting with defaults
+
+    def _migrate(self, saved: dict[str, Any]) -> None:
+        """Upgrade stale persisted settings to current defaults.
+
+        v2: the default screening universe grew from Nifty 50 to Nifty 500.
+        A persisted ``default_universe`` that still equals the legacy Nifty-50
+        list is almost certainly a stale snapshot, not a deliberate choice —
+        replace it with the current default. Custom universes are preserved.
+        """
+        if int(saved.get("config_version", 1)) < 2:
+            existing = saved.get("default_universe")
+            if isinstance(existing, list):
+                normalized = [str(s).strip().upper() for s in existing if str(s).strip()]
+                if sorted(normalized) == sorted(universe.NIFTY50):
+                    saved["default_universe"] = list(universe.default_universe())
+        saved["config_version"] = _CONFIG_VERSION
 
     def update_settings(self, patch: dict[str, Any]) -> dict[str, Any]:
         """Validate & apply a partial settings patch, then persist it.
@@ -273,8 +300,10 @@ class AppConfig(BaseSettings):
 
     def _persist(self, values: dict[str, Any]) -> None:
         self.ensure_directories()
+        out = dict(values)
+        out["config_version"] = _CONFIG_VERSION
         self.user_config_file.write_text(
-            json.dumps(values, indent=2), encoding="utf-8"
+            json.dumps(out, indent=2), encoding="utf-8"
         )
 
 
