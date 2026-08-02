@@ -80,7 +80,7 @@ def test_identical_requests_use_ttl_cache():
 
 
 def test_disabled_and_http_errors_are_structured():
-    disabled = IndianApiClient(IndianApiConfig())
+    disabled = IndianApiClient(IndianApiConfig(enabled=False))
     with pytest.raises(DataSourceError, match="disabled"):
         disabled.snapshot("trending")
 
@@ -90,17 +90,23 @@ def test_disabled_and_http_errors_are_structured():
     assert len(session.calls) == 1
 
 
-def test_free_plan_defaults_to_official_host_and_blocks_dedicated_endpoints():
+def test_free_plan_defaults_to_official_host_and_surfaces_api_errors():
     settings = IndianApiConfig(enabled=True, api_key="secret")
     api = IndianApiClient(settings, FakeSession(FakeResponse({})))
 
     assert settings.base_url == "https://stock.indianapi.in"
-    with pytest.raises(DataSourceError, match="dedicated-server plan"):
-        api.history("RELIANCE")
-    with pytest.raises(DataSourceError, match="dedicated-server plan"):
-        api.historical_stats("RELIANCE")
-    with pytest.raises(DataSourceError, match="dedicated-server plan"):
-        api.analysis("stock_forecasts", "RELIANCE")
+
+    # Dedicated-endpoint restrictions are enforced by the API host, not the
+    # client; rejections surface as DataSourceError instead of being swallowed.
+    rejected = FakeSession(FakeResponse({"error": "payment required"}, status_code=403))
+    api_403 = IndianApiClient(settings, rejected)
+    with pytest.raises(DataSourceError, match="HTTP 403"):
+        api_403.history("RELIANCE")
+    with pytest.raises(DataSourceError, match="HTTP 403"):
+        api_403.historical_stats("RELIANCE")
+    with pytest.raises(DataSourceError, match="HTTP 403"):
+        api_403.analysis("stock_forecasts", "RELIANCE")
+    assert len(rejected.calls) == 3
 
 
 class FakeGateway:

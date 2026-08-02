@@ -132,4 +132,5 @@ class FilterService:
             "score", "price", "rsi", "pe", "peg", "roe", "debt_to_equity",
             "sma50", "sma200", "above_sma50", "above_sma200",
             "golden_cross", "near_52w_high", "near_52w_low",
+            "name", "sector",
         ]

@@ -38,25 +38,26 @@ class AnalysisService:
         if callable(resolver):
             resolved = resolver(symbol) or symbol
 
-        history = self._data.fetch_history(resolved)
-        if history is None or history.empty or len(history) < 60:
+        history = self._data.fetch_history(
+            resolved, period=effective_config.data.default_period
+        )
+        min_rows = effective_config.data.min_history_rows
+        if history is None or history.empty or len(history) < min_rows:
+            # New listings or a provider hiccup can leave <min_rows of data at
+            # the default period; retry once with a longer lookback first.
+            history = self._data.fetch_history(
+                resolved, period=effective_config.data.fallback_period
+            )
+
+        # Clean: drop rows where Close is NaN (Yahoo placeholder rows)
+        history = history.dropna(subset=["Close"]) if history is not None else None
+        if history is None or history.empty or len(history) < min_rows:
             return Recommendation(
                 symbol=symbol.upper(),
                 action=Action.HOLD,
                 score=0.0,
                 price=0.0,
                 error="insufficient price history",
-            )
-
-        # Clean: drop rows where Close is NaN (Yahoo placeholder rows)
-        history = history.dropna(subset=["Close"])
-        if len(history) < 60:
-            return Recommendation(
-                symbol=symbol.upper(),
-                action=Action.HOLD,
-                score=0.0,
-                price=0.0,
-                error="insufficient price history after cleaning",
             )
 
         info = self._data.fetch_info(resolved)

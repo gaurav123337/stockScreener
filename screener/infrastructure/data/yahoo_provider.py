@@ -8,6 +8,8 @@ import pandas as pd
 
 from screener.core.config import config
 from screener.core.interfaces import MarketDataProvider
+from screener.infrastructure.data.fundamentals_cache import FundamentalsCache
+from screener.infrastructure.data.nse_master import NseMasterStore
 
 try:
     import yfinance as yf
@@ -22,7 +24,23 @@ class YahooDataProvider(MarketDataProvider):
     when no exchange suffix is given, NSE (`.NS`) is tried first with an
     automatic fallback to BSE (`.BO`) — this is what lets users search any
     specific stock, not just Nifty-50 names.
+
+    Fundamentals (``fetch_info``) are cached to disk for a configurable TTL
+    because Yahoo's ``info`` scrape is slow and rate-limited, and they fall
+    back to the offline NSE master so every scan row still carries a company
+    name and industry even when the scrape fails.
     """
+
+    def __init__(
+        self,
+        fundamentals_cache: FundamentalsCache | None = None,
+        nse_master: NseMasterStore | None = None,
+    ):
+        self._fundamentals = fundamentals_cache or FundamentalsCache(
+            config.data_dir / "fundamentals_cache.json",
+            ttl_seconds=config.data.fundamentals_cache_ttl_seconds,
+        )
+        self._nse = nse_master or NseMasterStore()
 
     def normalize_symbol(self, symbol: str, exchange: str = "NS") -> str:
         """Convert 'RELIANCE' -> 'RELIANCE.NS'. Pass-through if already suffixed.
@@ -149,21 +167,62 @@ class YahooDataProvider(MarketDataProvider):
         return None
 
     def fetch_info(self, symbol: str) -> dict[str, Any]:
-        """Fetch fundamentals snapshot. Returns {} on failure (non-fatal)."""
+        """Fetch a fundamentals snapshot, cached, with NSE metadata fallback.
+
+        Returns ``{}`` on failure (non-fatal). Yahoo's ``info`` scrape is slow
+        and rate-limited, so successful results are cached to disk for a TTL
+        (keyed on the bare NSE/BSE symbol). Company name / industry fall back
+        to the offline NSE master so rows always carry a label.
+        """
+        sym = self.normalize_symbol(symbol)
+        bare = self._bare_symbol(sym)
+
+        cached = self._fundamentals.get(bare)
+        if cached:
+            return cached
+
+        info = self._scrape_info(sym)
+
+        # Merge offline NSE metadata (name + industry) as a label fallback.
+        row = self._nse.lookup(bare)
+        if row:
+            info.setdefault("longName", row["name"] or None)
+            info.setdefault("sector", row["industry"] or None)
+            info.setdefault("industry", row["industry"] or None)
+
+        if info:
+            self._fundamentals.set(bare, info)
+        return info
+
+    def _scrape_info(self, sym: str) -> dict[str, Any]:
+        """One Yahoo fundamentals scrape, retried per config. {} on failure."""
         if yf is None:
             return {}
-        sym = self.normalize_symbol(symbol)
-        try:
-            t = yf.Ticker(sym)
-            info = t.get_info() or {}
-            keys = [
-                "longName", "sector", "industry", "marketCap", "currency",
-                "trailingPE", "forwardPE", "pegRatio", "priceToBook",
-                "returnOnEquity", "debtToEquity", "profitMargins",
-                "revenueGrowth", "earningsGrowth", "currentPrice",
-                "fiftyTwoWeekHigh", "fiftyTwoWeekLow", "fiftyDayAverage",
-                "twoHundredDayAverage", "dividendYield", "beta",
-            ]
-            return {k: info.get(k) for k in keys if info.get(k) is not None}
-        except Exception:
-            return {}
+        for attempt in range(config.data.retry_attempts + 1):
+            try:
+                ticker = yf.Ticker(sym)
+                # ``get_info()`` was deprecated in favour of ``info``; guard so
+                # this keeps working across yfinance versions.
+                info = ticker.get_info() if hasattr(ticker, "get_info") else ticker.info
+                info = info or {}
+                keys = [
+                    "longName", "sector", "industry", "marketCap", "currency",
+                    "trailingPE", "forwardPE", "pegRatio", "priceToBook",
+                    "returnOnEquity", "debtToEquity", "profitMargins",
+                    "revenueGrowth", "earningsGrowth", "currentPrice",
+                    "fiftyTwoWeekHigh", "fiftyTwoWeekLow", "fiftyDayAverage",
+                    "twoHundredDayAverage", "dividendYield", "beta",
+                ]
+                return {k: info.get(k) for k in keys if info.get(k) is not None}
+            except Exception:
+                pass
+            if attempt < config.data.retry_attempts:
+                time.sleep(config.data.retry_pause_seconds)
+        return {}
+
+    @staticmethod
+    def _bare_symbol(sym: str) -> str:
+        """Strip the Yahoo exchange suffix for cross-provider cache keys."""
+        if sym.endswith(".NS") or sym.endswith(".BO"):
+            return sym[:-3]
+        return sym
