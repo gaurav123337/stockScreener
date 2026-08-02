@@ -49,6 +49,7 @@ from screener.services import (
     FilterService,
     KnowledgeService,
     PreferencesService,
+    RecommendationService,
     ScanService,
     VerificationService,
     IndianMarketService,
@@ -613,6 +614,35 @@ def list_filters(user: UserProfile = Depends(get_current_user)):
         "predefined": filter_service.list_filters(),
         "fields": filter_service.get_filter_fields(),
     }
+
+
+@app.get("/api/recommendations")
+def recommendations(
+    limit: int = 10,
+    action: str = "",
+    user: UserProfile = Depends(get_current_user),
+):
+    """Top-ranked stock picks from the default universe.
+
+    Reuses the same row shape as /api/scan so the existing results UI renders
+    them unchanged. Mutual-fund picks arrive as a separate asset class later.
+    """
+    if limit < 1 or limit > 200:
+        raise ValidationError("limit must be between 1 and 200")
+    if action and action not in ("BUY", "HOLD", "SELL"):
+        raise ValidationError("action must be BUY, HOLD, or SELL")
+
+    prefs = get_service(PreferencesService)
+    effective_config = prefs.get_effective_config(user.user_id)
+    engine = get_service(RecommendationService)
+    try:
+        return engine.recommend_stocks(
+            limit=limit,
+            action=action or None,
+            app_config=effective_config,
+        )
+    except Exception as e:
+        raise DataSourceError(f"Recommendations failed: {e}")
 
 
 @app.get("/api/search")

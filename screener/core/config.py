@@ -127,6 +127,10 @@ class AppConfig(BaseSettings):
     indian_api: IndianApiConfig = Field(default_factory=IndianApiConfig)
     market_data_provider: Literal["yahoo", "indian_api", "hybrid"] = "yahoo"
 
+    # Which adapter backs the Indian market workspace. Both providers conform
+    # to the same gateway contract, so this is the only switch that changes.
+    indian_market_provider: Literal["indian_api", "yahoo"] = "indian_api"
+
     # Environment
     environment: Literal["development", "production", "testing"] = "development"
     debug: bool = False

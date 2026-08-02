@@ -11,6 +11,7 @@ import requests
 
 from screener.core.config import IndianApiConfig
 from screener.core.indian_market import (
+    HISTORY_POINT_KEYS,
     HistoricalSeries,
     HistoricalStats,
     IndianMarketGateway,
@@ -56,6 +57,10 @@ class IndianApiClient(IndianMarketGateway):
         self._rate_lock = threading.Lock()
         self._telemetry = IndianApiTelemetry()
         self._telemetry_lock = threading.Lock()
+
+    @property
+    def provider_name(self) -> str:
+        return "indian_api"
 
     def _record(self, **changes: Any) -> None:
         with self._telemetry_lock:
@@ -174,7 +179,39 @@ class IndianApiClient(IndianMarketGateway):
 
     def history(self, stock_id: str, **params: str) -> HistoricalSeries:
         payload = self._request("historical_data", {"stock_id": stock_id, **params})
-        return HistoricalSeries(stock_id=stock_id, points=payload if isinstance(payload, list) else [])
+        return HistoricalSeries(
+            stock_id=stock_id,
+            points=self._normalize_points(payload if isinstance(payload, list) else []),
+        )
+
+    @staticmethod
+    def _normalize_points(points: list[Any]) -> list[dict[str, Any]]:
+        """Map provider-specific point keys onto the common OHLCV contract.
+
+        Unknown keys are preserved so no information is dropped; canonical keys
+        are added from common aliases when the provider uses different names.
+        """
+        alias_sets = {
+            "date": ("date", "timestamp", "datetime", "time"),
+            "open": ("open", "Open"),
+            "high": ("high", "High"),
+            "low": ("low", "Low"),
+            "close": ("close", "Close", "price", "last"),
+            "volume": ("volume", "Volume", "vol"),
+        }
+        out: list[dict[str, Any]] = []
+        for point in points:
+            if not isinstance(point, dict):
+                out.append(point)
+                continue
+            item = dict(point)
+            for canon, aliases in alias_sets.items():
+                for alias in aliases:
+                    if alias in item:
+                        item.setdefault(canon, item[alias])
+                        break
+            out.append(item)
+        return out
 
     def historical_stats(self, stock_id: str, **params: str) -> HistoricalStats:
         return HistoricalStats(stock_id=stock_id, stats=self._request("historical_stats", {"stock_id": stock_id, **params}))
