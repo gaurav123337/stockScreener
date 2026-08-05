@@ -21,6 +21,7 @@ from screener.infrastructure.persistence.csv_repository import (
 from screener.services import (
     AnalysisService,
     AuthService,
+    BacktestService,
     BrokerService,
     ControlCenterService,
     FeedbackService,
@@ -54,6 +55,7 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(AnalysisService, AnalysisService)
     container.register(ScanService, ScanService)
     container.register(VerificationService, VerificationService)
+    container.register(BacktestService, BacktestService)
     container.register(KnowledgeService, KnowledgeService)
     container.register(FilterService, FilterService)
     container.register(BrokerService, BrokerService)

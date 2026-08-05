@@ -24,7 +24,15 @@ const GUIDE_SECTIONS: ReadonlyArray<{ title: string; items: readonly string[] }>
     items: [
       "Drop research PDFs, notes, or video transcripts in Train to add their rules to the knowledge base.",
       "Paste URLs of good blogs/articles to ingest them.",
-      "The screener logs every call and scores its own hit-rate after 30 days (see data/predictions.csv or CLI python main.py verify).",
+      "The screener logs every call and scores its own Signal Score hit-rate at 30/90/365-day horizons. See Track Record for the published walk-forward results.",
+    ],
+  },
+  {
+    title: "What is the Signal Score?",
+    items: [
+      "The score is a rule-based blend of trend, momentum, volume and fundamentals — not a magic 'AI' prediction.",
+      "Confidence measures how much those pillars agree and how strong the signal is. It is a transparency measure, not a probability of profit.",
+      "Every claim sits on real evidence: open Track Record to see dated hit-rates vs the NIFTY50 benchmark.",
     ],
   },
   {

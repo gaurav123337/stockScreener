@@ -336,7 +336,7 @@
     ["risk", "Risk & Trade Levels", "Stop-loss / target calculation."],
     ["data", "Data Fetching", "History window and reliability for market data."],
     ["knowledge", "Knowledge Base", "How training documents are ingested."],
-    ["verification", "Verification", "How prediction accuracy is measured."],
+    ["verification", "Verification", "How signal hit-rates are measured."],
   ];
   const LABEL = {
     buy_threshold: "BUY score threshold", sell_threshold: "SELL score threshold",
@@ -446,7 +446,7 @@
         <ol class="guide mini">
           <li>Drop research PDFs, notes, or video transcripts in <b>Train</b> to add their rules to the knowledge base.</li>
           <li>Paste URLs of good blogs/articles to ingest them.</li>
-          <li>The screener logs every call and scores its own hit-rate after 30 days (see <code class="inline">data/predictions.csv</code> or CLI <code class="inline">python main.py verify</code>).</li>
+          <li>The screener logs every call and scores its own Signal Score hit-rate at 30/90/365-day horizons. See the Track Record tab for published walk-forward results.</li>
         </ol></div>
       <div class="card"><div class="sym" style="margin-bottom:6px">Broker APIs</div>
         <ol class="guide mini">

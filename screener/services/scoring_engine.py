@@ -219,6 +219,67 @@ class ScoringEngine:
             all_reasons.extend(r)
         return total, all_reasons
 
+    def active_scorers(self) -> list[ScoringStrategy]:
+        return (
+            registry.get_all_scorers()
+            if self._use_registry and registry.get_all_scorers()
+            else self._default_scorers
+        )
+
+    def pillar_scores(
+        self, last: pd.Series, prev: pd.Series | None, info: dict
+    ) -> dict[str, float]:
+        """Per-pillar score breakdown (trend/momentum/volume/fundamentals)."""
+        out: dict[str, float] = {}
+        for scorer in self.active_scorers():
+            s, _ = scorer.score(last, prev, info)
+            out[scorer.name] = round(float(s), 2)
+        return out
+
+    def confidence(
+        self,
+        last: pd.Series,
+        prev: pd.Series | None,
+        info: dict,
+        apply_age_penalty: bool = True,
+    ) -> float:
+        """0.0–1.0 transparency measure for a single signal.
+
+        Built from three honest, explainable inputs — NOT a probability of
+        profit:
+        - pillar agreement: do trend / momentum / fundamentals point the same
+          way? (biggest driver)
+        - signal strength: how far the score is from neutral
+        - data freshness: quotes older than ~a week are penalised (suppressed
+          for walk-forward backtest replays, where the rows are historical)
+        """
+        pillars = self.pillar_scores(last, prev, info)
+        mains = [
+            pillars.get("trend", 0.0),
+            pillars.get("momentum", 0.0),
+            pillars.get("fundamentals", 0.0),
+        ]
+        nonzero = [s for s in mains if s != 0]
+        if nonzero:
+            same = sum(1 for s in nonzero if (s > 0) == (nonzero[0] > 0))
+            agreement = same / len(nonzero)
+        else:
+            agreement = 0.0
+        strength = min(abs(sum(mains)) / 60.0, 1.0)
+
+        age_penalty = 0.0
+        if apply_age_penalty:
+            try:
+                last_date = pd.Timestamp(last.name).date()
+                age_days = (pd.Timestamp.now().date() - last_date).days
+                if age_days > 7:
+                    age_penalty = min(0.4, 0.1 * (age_days - 7) / 30.0)
+            except Exception:
+                pass
+
+        value = 0.25 + 0.55 * agreement + 0.2 * strength - age_penalty
+        return round(max(0.0, min(1.0, value)), 2)
+
 
 # Auto-register defaults so plugins can override
 for _scorer in [TrendScorer(), MomentumScorer(), VolumeScorer(), FundamentalScorer()]:

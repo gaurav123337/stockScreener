@@ -63,11 +63,40 @@ export function ScanResultsTable(props: {
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs leading-5 text-muted">
-        {result.count} matched · {result.failed.length} failed to fetch. Select a row for reasons.
-      </p>
+      <div className="mt-2 space-y-1 text-xs leading-5 text-muted">
+        <p>
+          {result.count} matched · {result.failed.length} failed to fetch. Select a row for reasons.
+        </p>
+        {(typeof result.universe_size === "number" ||
+          result.data_updated_at ||
+          result.data_source) && (
+          <p>
+            {typeof result.coverage === "number" && result.universe_size > 0 && (
+              <>Coverage {Math.round(result.coverage * 100)}% of {result.universe_size} symbols · </>
+            )}
+            {result.data_source ? <>{result.data_source} </> : null}
+            {result.data_updated_at ? <>As of {fmtDate(result.data_updated_at)}.</> : null}
+          </p>
+        )}
+        {result.stale && (
+          <p className="font-semibold text-warning">
+            Data may be stale — last fetch is older than the cache window.
+          </p>
+        )}
+      </div>
     </>
   );
+}
+
+function fmtDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function ScanResultRows({

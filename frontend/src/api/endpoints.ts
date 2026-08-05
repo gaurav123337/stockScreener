@@ -8,6 +8,7 @@ import type {
   BrokerConnectRequest,
   BrokerInstructionsResponse,
   BrokerStatusResponse,
+  ComplianceResponse,
   ConfigDiff,
   ConfigPublication,
   ConfigRegistryItem,
@@ -32,6 +33,7 @@ import type {
   SettingsPatch,
   UserProfile,
   VerifyResponse,
+  BacktestReport,
   WatchlistResponse,
 } from "@/types/api";
 import { http } from "./client";
@@ -124,6 +126,9 @@ export const api = {
   filters: () => http.get<FiltersResponse>("/api/filters"),
   search: (q: string) => http.get<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`),
   verify: () => http.get<VerifyResponse>("/api/verify"),
+  backtest: () => http.get<BacktestReport>("/api/backtest"),
+  backtestRun: () => http.post<BacktestReport>("/api/backtest/run"),
+  compliance: () => http.get<ComplianceResponse>("/api/compliance"),
 
   /* Settings */
   settings: () => http.get<Settings>("/api/settings"),

@@ -140,6 +140,41 @@ def test_scoring_engine_pluggable():
     print(f"  Pluggable scorer OK (total={score:+.1f})")
 
 
+def test_confidence_and_pillars_are_bounded_and_explainable():
+    """Phase-1: confidence is a transparency measure (0..1), never a
+    probability of profit, and every call carries a per-pillar breakdown."""
+    engine = ScoringEngine(use_registry=False)
+    df = make_df(list(np.linspace(100, 160, 260)))  # clean uptrend
+    df = add_all(df)
+    last, prev = df.iloc[-1], df.iloc[-2]
+
+    pillars = engine.pillar_scores(last, prev, {})
+    assert pillars, "expected a non-empty pillar breakdown"
+    assert set(pillars) <= {"trend", "momentum", "volume", "fundamentals"}
+
+    conf = engine.confidence(last, prev, {}, apply_age_penalty=False)
+    assert 0.0 <= conf <= 1.0
+    # Agreement is the biggest driver: a uniform uptrend reads high.
+    assert conf >= 0.25
+
+    # The age penalty never increases confidence.
+    aged = engine.confidence(last, prev, {})
+    assert aged <= conf
+    print(f"  Confidence OK (pillars={pillars}, conf={conf}, aged={aged})")
+
+
+def test_analysis_attaches_confidence_and_pillars():
+    provider = MockDataProvider(
+        make_df(list(np.linspace(100, 160, 260))),
+        info={"pegRatio": 0.8, "returnOnEquity": 0.2},
+    )
+    analysis = AnalysisService(data_provider=provider, scoring_engine=ScoringEngine(use_registry=False))
+    rec = analysis.analyze("TEST.NS")
+    assert rec.confidence is not None and 0.0 <= rec.confidence <= 1.0
+    assert rec.pillars, "expected per-pillar scores on the recommendation"
+    assert rec.score is not None
+
+
 if __name__ == "__main__":
     test_rsi_bounds()
     test_buy_on_uptrend()

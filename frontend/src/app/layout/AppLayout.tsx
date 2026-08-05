@@ -5,6 +5,7 @@ import { LoadingState } from "@/components/ui/Spinner";
 import { useAuth } from "@/features/auth/auth-context";
 import { cn } from "@/lib/cn";
 import {
+  BarChart3,
   BrainCircuit,
   CircleHelp,
   Command,
@@ -38,6 +39,7 @@ const PRIMARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
   { to: "/recommend", icon: TrendingUp, label: "Recommended" },
   { to: "/scan", icon: ScanSearch, label: "Scan" },
   { to: "/indian-market", icon: Landmark, label: "Indian Market" },
+  { to: "/track-record", icon: BarChart3, label: "Track Record" },
   { to: "/train", icon: BrainCircuit, label: "Train" },
   { to: "/brokers", icon: WalletCards, label: "Broker" },
 ];

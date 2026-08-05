@@ -24,7 +24,7 @@ class CSVPredictionRepository(PredictionRepository):
     FIELDS = [
         "ts", "symbol", "action", "price_at_call", "target", "stop_loss",
         "horizon_days", "evaluated", "eval_date", "price_at_eval",
-        "outcome", "return_pct",
+        "outcome", "return_pct", "score", "confidence", "user_id",
     ]
 
     def __init__(self, filepath: Path | None = None):
@@ -36,6 +36,41 @@ class CSVPredictionRepository(PredictionRepository):
         if not self._filepath.exists():
             with self._filepath.open("w", newline="", encoding="utf-8") as f:
                 csv.DictWriter(f, fieldnames=self.FIELDS).writeheader()
+            return
+        # Migrate a stale header (e.g. before the score/confidence/user_id
+        # columns were added) so older prediction files keep working and the
+        # new fields are readable, not hidden in unnamed columns.
+        try:
+            with self._filepath.open("r", newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                header = list(reader.fieldnames or [])
+                rows = list(reader)
+        except Exception:
+            return
+        if header == self.FIELDS:
+            return
+        self._rewrite(header, rows)
+
+    def _rewrite(self, header: list[str], rows: list[dict]) -> None:
+        """Rewrite the CSV with the current FIELDS, mapping old columns
+        positionally and de-duplicating backfilled replay signals."""
+        seen = set()
+        with self._filepath.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=self.FIELDS)
+            writer.writeheader()
+            for row in rows:
+                values = [row.get(col, "") for col in header]
+                extras = row.get(None)
+                if isinstance(extras, str):
+                    extras = [extras]
+                values += list(extras or [])
+                record = dict(zip(self.FIELDS, values))
+                if record.get("user_id") == "system/backtest":
+                    key = (record.get("ts"), record.get("symbol"))
+                    if key in seen:
+                        continue  # keep the first copy of each replayed signal
+                    seen.add(key)
+                writer.writerow(record)
 
     def _row_to_record(self, row: dict[str, str]) -> PredictionRecord:
         return PredictionRecord(
@@ -43,14 +78,17 @@ class CSVPredictionRepository(PredictionRepository):
             symbol=row["symbol"],
             action=Action(row["action"]),
             price_at_call=float(row["price_at_call"]),
-            target=float(row["target"]) if row["target"] else None,
-            stop_loss=float(row["stop_loss"]) if row["stop_loss"] else None,
+            target=float(row["target"]) if row.get("target") else None,
+            stop_loss=float(row["stop_loss"]) if row.get("stop_loss") else None,
             horizon_days=int(row["horizon_days"]),
-            evaluated=row["evaluated"] == "1",
-            eval_date=datetime.fromisoformat(row["eval_date"]) if row["eval_date"] else None,
-            price_at_eval=float(row["price_at_eval"]) if row["price_at_eval"] else None,
-            outcome=Outcome(row["outcome"]) if row["outcome"] else None,
-            return_pct=float(row["return_pct"]) if row["return_pct"] else None,
+            evaluated=row.get("evaluated") == "1",
+            eval_date=datetime.fromisoformat(row["eval_date"]) if row.get("eval_date") else None,
+            price_at_eval=float(row["price_at_eval"]) if row.get("price_at_eval") else None,
+            outcome=Outcome(row["outcome"]) if row.get("outcome") else None,
+            return_pct=float(row["return_pct"]) if row.get("return_pct") else None,
+            score=float(row["score"]) if row.get("score") else None,
+            confidence=float(row["confidence"]) if row.get("confidence") else None,
+            user_id=row.get("user_id") or None,
         )
 
     def _record_to_row(self, record: PredictionRecord) -> dict[str, Any]:
@@ -67,11 +105,12 @@ class CSVPredictionRepository(PredictionRepository):
             "price_at_eval": record.price_at_eval or "",
             "outcome": record.outcome.value if record.outcome else "",
             "return_pct": record.return_pct or "",
+            "score": record.score if record.score is not None else "",
+            "confidence": record.confidence if record.confidence is not None else "",
+            "user_id": record.user_id or "",
         }
 
     def save(self, record: PredictionRecord) -> None:
-        if record.action not in (Action.BUY, Action.SELL):
-            return  # only verifiable directional calls
         with self._filepath.open("a", newline="", encoding="utf-8") as f:
             csv.DictWriter(f, fieldnames=self.FIELDS).writerow(
                 self._record_to_row(record)

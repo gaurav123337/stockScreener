@@ -10,7 +10,6 @@ from typing import Callable
 from screener.core.config import AppConfig, config
 from screener.core.models import Recommendation, ScanResult
 from screener.services.analysis_service import AnalysisService
-from screener.services.verification_service import VerificationService
 
 
 class ScanService:
@@ -19,10 +18,8 @@ class ScanService:
     def __init__(
         self,
         analysis_service: AnalysisService | None = None,
-        verification_service: VerificationService | None = None,
     ):
         self._analysis = analysis_service or AnalysisService()
-        self._verification = verification_service or VerificationService()
 
     def scan(
         self,
@@ -45,12 +42,8 @@ class ScanService:
                 )
             )
 
-        # Log predictions for BUY/SELL
-        for rec in recommendations:
-            if rec.action.value in ("BUY", "SELL"):
-                self._verification.log_prediction(rec)
-
-        # Separate successes from failures
+        # Prediction logging happens at the API/CLI layer so the authenticated
+        # user_id can be attached (see api.py / main.py).
         matched = [r for r in recommendations if r.error is None]
         failed = [
             {"symbol": r.symbol, "error": r.error or "unknown"}

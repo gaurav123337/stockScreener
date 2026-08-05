@@ -9,6 +9,7 @@ import pandas as pd
 from screener.core.config import config
 from screener.core.interfaces import MarketDataProvider
 from screener.infrastructure.data.fundamentals_cache import FundamentalsCache
+from screener.infrastructure.data.history_cache import HistoryCache
 from screener.infrastructure.data.nse_master import NseMasterStore
 
 try:
@@ -35,10 +36,15 @@ class YahooDataProvider(MarketDataProvider):
         self,
         fundamentals_cache: FundamentalsCache | None = None,
         nse_master: NseMasterStore | None = None,
+        history_cache: HistoryCache | None = None,
     ):
         self._fundamentals = fundamentals_cache or FundamentalsCache(
             config.data_dir / "fundamentals_cache.json",
             ttl_seconds=config.data.fundamentals_cache_ttl_seconds,
+        )
+        self._history = history_cache or HistoryCache(
+            config.data_dir / "history_cache.json",
+            ttl_seconds=config.data.history_cache_ttl_seconds,
         )
         self._nse = nse_master or NseMasterStore()
 
@@ -122,7 +128,12 @@ class YahooDataProvider(MarketDataProvider):
         period: str | None = None,
         interval: str | None = None,
     ) -> pd.DataFrame | None:
-        """Fetch OHLCV history with retries + NSE->BSE fallback."""
+        """Fetch OHLCV history with a disk cache + retries + NSE->BSE fallback.
+
+        A successful download is cached for ``history_cache_ttl_seconds``, so
+        repeated scans read from disk instead of hammering the provider. The
+        cache is best-effort: any I/O failure just means one re-fetch.
+        """
         if yf is None:
             return None
 
@@ -131,6 +142,12 @@ class YahooDataProvider(MarketDataProvider):
 
         raw = symbol.strip().upper().replace("%26", "&")
         raw = " ".join(raw.split())
+
+        # Try the disk cache first (per symbol, period and interval).
+        cached = self._history.get(raw, period, interval)
+        if cached is not None and not cached.empty:
+            return cached
+
         candidates = (
             [raw] if (raw.endswith(".NS") or raw.endswith(".BO"))
             else [f"{raw}.NS", f"{raw}.BO"]
@@ -139,8 +156,16 @@ class YahooDataProvider(MarketDataProvider):
         for sym in candidates:
             df = self._download(sym, period, interval)
             if df is not None:
+                self._history.set(raw, period, interval, df)
                 return df
         return None
+
+    def history_updated_at(self):
+        """UTC timestamp of the freshest cached history (None when empty).
+
+        Surfaces "data as of …" for the compliance/freshness envelope.
+        """
+        return self._history.last_fetched_at()
 
     def _download(
         self, sym: str, period: str, interval: str

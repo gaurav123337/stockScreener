@@ -68,6 +68,11 @@ class Recommendation(BaseModel):
     metrics: StockMetrics = Field(default_factory=StockMetrics)
     error: str | None = None
     analyzed_at: datetime = Field(default_factory=datetime.now)
+    # Phase-1 trust additions: how much the pillars agree + the per-pillar
+    # score breakdown. Explicitly NOT a "probability of profit" — it is a
+    # transparency measure (agreement, signal strength, data freshness).
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    pillars: dict[str, float] = Field(default_factory=dict)
 
     @computed_field
     @property
@@ -83,6 +88,8 @@ class Recommendation(BaseModel):
             "sector": m.sector,
             "action": self.action.value,
             "score": self.score,
+            "confidence": self.confidence,
+            "pillars": self.pillars,
             "price": self.price,
             "entry": self.entry,
             "target": self.target,
@@ -128,14 +135,69 @@ class PredictionRecord(BaseModel):
     price_at_eval: float | None = None
     outcome: Outcome | None = None
     return_pct: float | None = None
+    score: float | None = None
+    confidence: float | None = None
+    user_id: str | None = None
+
+    def return_at(self, price: float) -> float:
+        """Directional return at ``price`` — positive means the call was right."""
+        if self.action == Action.BUY:
+            return (price - self.price_at_call) / self.price_at_call
+        if self.action == Action.SELL:
+            return (self.price_at_call - price) / self.price_at_call
+        # HOLD: penalise large moves in either direction (the call was "stay put").
+        return -abs((price - self.price_at_call) / self.price_at_call)
+
+    def directional_win(self, price: float, flat_band: float = 0.02) -> bool:
+        """True when the signal's expectation at ``price`` was met.
+
+        BUY/SELL are judged directionally; HOLD is judged as "stayed flat"
+        (within ``flat_band`` of the call price), which is the honest reading
+        of a neutral signal.
+        """
+        ret = self.return_at(price)
+        if self.action == Action.HOLD:
+            return abs(ret) <= flat_band
+        return ret > 0
+
+
+class HorizonStats(BaseModel):
+    """Aggregate backtest statistics for one evaluation horizon."""
+    horizon_days: int
+    n: int = 0
+    hit_rate: float | None = None          # % of signals correct
+    avg_return: float | None = None        # mean directional return
+    avg_win: float | None = None           # mean return of winning signals
+    avg_loss: float | None = None          # mean return of losing signals
+    max_drawdown: float | None = None      # worst peak-to-trough (fraction)
+    benchmark_avg_return: float | None = None
+    vs_benchmark: float | None = None      # avg_return - benchmark_avg_return
+    by_action: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class VerificationReport(BaseModel):
-    """Summary of prediction verification."""
+    """Summary of prediction verification (rolling, dated)."""
     evaluated_now: int = 0
     total_evaluated: int = 0
     overall_hit_rate: float | None = None
     by_action: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    horizons: list[HorizonStats] = Field(default_factory=list)
+    benchmark_symbol: str | None = None
+    window_start: datetime | None = None
+    generated_at: datetime = Field(default_factory=datetime.now)
+
+
+class BacktestReport(BaseModel):
+    """Published walk-forward track record (Stockopedia-style evidence)."""
+    status: str = "ok"
+    generated_at: datetime = Field(default_factory=datetime.now)
+    window_start: datetime
+    window_end: datetime
+    universe: list[str] = Field(default_factory=list)
+    universe_size: int = 0
+    horizons: list[HorizonStats] = Field(default_factory=list)
+    methodology: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
 
 
 class LearnResult(BaseModel):

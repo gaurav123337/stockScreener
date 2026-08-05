@@ -75,6 +75,10 @@ class AnalysisService:
         score, reasons = scorer.total_score(last, prev, info)
         score = float(max(-100, min(100, score)))
 
+        # Phase-1: transparent confidence + per-pillar breakdown for this call.
+        confidence = scorer.confidence(last, prev, info)
+        pillars = scorer.pillar_scores(last, prev, info)
+
         # Map to action
         if score >= effective_config.scoring.buy_threshold:
             action = Action.BUY
@@ -102,6 +106,8 @@ class AnalysisService:
             risk_reward=rr,
             reasons=reasons,
             metrics=metrics,
+            confidence=confidence,
+            pillars=pillars,
         )
 
     def _build_levels(

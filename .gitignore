@@ -23,6 +23,9 @@ data/control_center.db-shm
 data/control_center.db-wal
 data/auth_email_outbox.jsonl
 data/user_config.json
+data/fundamentals_cache.json
+data/history_cache.json
+data/backtest_report.json
 
 # Learned knowledge manifest (local state)
 knowledge_graph/.learn_manifest.json

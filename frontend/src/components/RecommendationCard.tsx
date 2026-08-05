@@ -47,7 +47,28 @@ export function RecommendationCard({ row }: { row: ScanRow }) {
         Score {row.score > 0 ? "+" : ""}
         {fmt(row.score, 0)}
         {row.rr ? ` · R:R ${fmt(row.rr, 2)}` : ""}
+        {row.confidence !== null && row.confidence !== undefined ? (
+          <span title="Pillar agreement + signal strength — not a probability of profit">
+            {" "}
+            · Confidence {(row.confidence * 100).toFixed(0)}%
+          </span>
+        ) : null}
       </div>
+
+      {row.pillars && Object.keys(row.pillars).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {Object.entries(row.pillars).map(([pillar, value]) => (
+            <span
+              key={pillar}
+              className="rounded-md border border-border bg-surface-raised px-1.5 py-0.5 text-[11px] text-muted"
+              title="Per-factor signal score"
+            >
+              {pillar} {value > 0 ? "+" : ""}
+              {fmt(value, 0)}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="mt-2 mb-1 text-[15px]">
         LTP <b>₹{fmt(row.price)}</b>

@@ -16,6 +16,7 @@ import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Thread
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile, File
@@ -27,6 +28,11 @@ from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from screener.bootstrap import bootstrap, get_service
+from screener.core.compliance import (
+    compliance_block,
+    coverage_ratio,
+    provenance_block,
+)
 from screener.core.config import config
 from screener.core.feedback_models import FeedbackSubmission, FeedbackWorkflowUpdate
 from screener.core.interfaces import MarketDataProvider
@@ -43,6 +49,7 @@ from screener.core.user_models import UserCreate, UserLogin, UserProfile
 from screener.services import (
     AnalysisService,
     AuthService,
+    BacktestService,
     BrokerService,
     ControlCenterService,
     FeedbackService,
@@ -70,12 +77,37 @@ WEB = DIST if (DIST / "index.html").exists() else LEGACY_WEB
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: ensure guest user exists. Shutdown: cleanup."""
+    """Startup: ensure guest user exists + warm the track record. Shutdown: cleanup."""
     auth = get_service(AuthService)
     auth.ensure_guest_user()
     control_center = get_service(ControlCenterService)
     control_center.load_active_config()
     control_center.bootstrap_product_owner()
+
+    # Warm the published walk-forward backtest in the background so the first
+    # page view never blocks on a multi-minute replay — and backfill its
+    # signals into the verification log so /api/verify returns dated, nonzero
+    # results from day one (stamped system/backtest, deduplicated on restart).
+    def _warm_backtest():
+        try:
+            backtest = get_service(BacktestService)
+            verification = get_service(VerificationService)
+            if verification.has_backtest_seed():
+                backtest.get()
+            else:
+                verification.seed_from_backtest(backtest.replay_records())
+            # Warm the index series too, so the first /api/verify call reads the
+            # benchmark from disk instead of a slow direct download.
+            from screener.services.evaluation import load_benchmark
+
+            load_benchmark(
+                get_service(MarketDataProvider),
+                config.verification.benchmark_symbol,
+            )
+        except Exception:
+            pass
+
+    Thread(target=_warm_backtest, daemon=True).start()
     yield
 
 
@@ -553,7 +585,7 @@ def recommend(symbol: str, user: UserProfile = Depends(get_current_user)):
 
     if rec.error is None:
         try:
-            verification.log_prediction(rec)
+            verification.log_prediction(rec, user.user_id)
         except Exception:
             pass  # Logging is non-critical
 
@@ -599,10 +631,33 @@ def scan(body: ScanBody, user: UserProfile = Depends(get_current_user)):
     except Exception as e:
         raise DataSourceError(f"Scan failed: {e}")
 
+    # Persist the served signals so the product's track record stays auditable
+    # (every call is dated and attributable to the requesting user).
+    try:
+        get_service(VerificationService).log_recommendations(
+            result.matched, user.user_id
+        )
+    except Exception:
+        pass  # Logging is non-critical
+
+    # Freshness + trust framing for the whole scan (Phase-0 compliance).
+    data = get_service(MarketDataProvider)
+    data_updated_at = getattr(data, "history_updated_at", lambda: None)()
+    block = compliance_block()
+    provenance = provenance_block(data_updated_at)
+
     return {
         "count": len(result.matched),
         "failed": result.failed,
         "results": [r.to_scan_row() for r in result.matched],
+        "universe_size": result.total_scanned,
+        "coverage": coverage_ratio(len(result.matched), result.total_scanned),
+        "scanned_at": datetime.now(timezone.utc).isoformat(),
+        "educational_note": block["educational_note"],
+        "disclaimer": block["disclaimer"],
+        "data_source": block["data_source"],
+        "data_updated_at": provenance["data_updated_at"],
+        "stale": provenance["stale"],
     }
 
 
@@ -636,13 +691,43 @@ def recommendations(
     effective_config = prefs.get_effective_config(user.user_id)
     engine = get_service(RecommendationService)
     try:
-        return engine.recommend_stocks(
+        payload = engine.recommend_stocks(
             limit=limit,
             action=action or None,
             app_config=effective_config,
         )
     except Exception as e:
         raise DataSourceError(f"Recommendations failed: {e}")
+
+    # Attach the same trust/freshness envelope as /api/scan (Phase-0).
+    data = get_service(MarketDataProvider)
+    data_updated_at = getattr(data, "history_updated_at", lambda: None)()
+    block = compliance_block()
+    provenance = provenance_block(data_updated_at)
+    payload["universe_size"] = payload.get("total_scanned", 0)
+    payload["coverage"] = coverage_ratio(payload["count"], payload.get("total_scanned", 0))
+    payload["scanned_at"] = datetime.now(timezone.utc).isoformat()
+    payload["educational_note"] = block["educational_note"]
+    payload["disclaimer"] = block["disclaimer"]
+    payload["data_source"] = block["data_source"]
+    payload["data_updated_at"] = provenance["data_updated_at"]
+    payload["stale"] = provenance["stale"]
+    return payload
+
+
+@app.get("/api/compliance")
+def compliance(user: UserProfile = Depends(get_current_user)):
+    """Trust framing + data-source attribution for the current data state.
+
+    The frontend fetches this once so every screen that shows a score or
+    action can carry the same prominent disclaimer and last-updated stamp.
+    """
+    data = get_service(MarketDataProvider)
+    data_updated_at = getattr(data, "history_updated_at", lambda: None)()
+    return {
+        **compliance_block(),
+        **provenance_block(data_updated_at),
+    }
 
 
 @app.get("/api/search")
@@ -666,23 +751,44 @@ def search(q: str = "", user: UserProfile = Depends(get_current_user)):
 
 @app.get("/api/verify")
 def verify(user: UserProfile = Depends(get_current_user)):
-    """Verify past predictions against current prices."""
+    """Verify past predictions against historical prices.
+
+    The evaluation window is rolling: every logged signal is measured at each
+    configured horizon (30/90/365 days) as soon as that horizon has elapsed, so
+    the reported hit-rates are dated and recompute as more history accrues.
+    """
     verification = get_service(VerificationService)
-    broker = get_service(BrokerService)
-
-    def price_of(sym: str):
-        try:
-            live = broker.get_ltp(sym)
-            if live:
-                return live
-        except Exception:
-            pass
-        return verification.get_current_price(sym)
-
     try:
-        return verification.verify(price_of).model_dump(mode="json")
+        return verification.verify().model_dump(mode="json")
     except Exception as e:
         raise DataSourceError(f"Verification failed: {e}")
+
+
+# --------------------------------------------------------------------------- #
+# Published track record (walk-forward backtest)
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/backtest")
+def backtest(user: UserProfile = Depends(get_current_user)):
+    """Published walk-forward track record of the signal engine.
+
+    Serves the cached report (regenerated automatically when stale); a cold
+    cache is recomputed on demand. This is the Stockopedia-style evidence the
+    "Signal Score" claims rest on.
+    """
+    try:
+        return get_service(BacktestService).get().model_dump(mode="json")
+    except Exception as e:
+        raise DataSourceError(f"Backtest unavailable: {e}")
+
+
+@app.post("/api/backtest/run")
+def backtest_run(user: UserProfile = Depends(require_product_owner)):
+    """Force a fresh walk-forward replay and republish the track record."""
+    try:
+        return get_service(BacktestService).run().model_dump(mode="json")
+    except Exception as e:
+        raise DataSourceError(f"Backtest failed: {e}")
 
 
 # --------------------------------------------------------------------------- #

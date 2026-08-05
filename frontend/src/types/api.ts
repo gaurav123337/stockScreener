@@ -156,6 +156,10 @@ export interface ScanRow {
   sector: string | null;
   action: Action;
   score: number;
+  /** Phase-1 transparency measure (0..1) — NOT a probability of profit. */
+  confidence?: number | null;
+  /** Per-pillar score breakdown (trend/momentum/volume/fundamentals). */
+  pillars?: Record<string, number>;
   price: number | null;
   entry: number | null;
   target: number | null;
@@ -182,6 +186,25 @@ export interface ScanResponse {
   count: number;
   failed: string[];
   results: ScanRow[];
+  /** Phase-0 trust/freshness envelope (see api.py /api/scan). */
+  universe_size: number;
+  coverage: number;
+  scanned_at: string;
+  educational_note?: string;
+  disclaimer?: string;
+  data_source?: string;
+  data_updated_at?: string | null;
+  stale?: boolean;
+}
+
+/** Trust framing + data-source attribution (GET /api/compliance). */
+export interface ComplianceResponse {
+  educational_note: string;
+  disclaimer: string;
+  data_source: string;
+  is_investment_advice: boolean;
+  data_updated_at: string | null;
+  stale: boolean;
 }
 
 export interface PredefinedFilter {
@@ -268,8 +291,42 @@ export type HoldingsResponse = Record<string, unknown>;
 
 /* ---------------------------------- Verification ----------------------------- */
 
+/** One evaluation horizon's aggregate stats (shared by verify + backtest). */
+export interface HorizonStats {
+  horizon_days: number;
+  n: number;
+  hit_rate: number | null;
+  avg_return: number | null;
+  avg_win: number | null;
+  avg_loss: number | null;
+  max_drawdown: number | null;
+  benchmark_avg_return: number | null;
+  vs_benchmark: number | null;
+  by_action: Record<string, { n: number; hit_rate: number; avg_return: number }>;
+}
+
 export interface VerifyResponse {
-  [key: string]: unknown;
+  evaluated_now: number;
+  total_evaluated: number;
+  overall_hit_rate: number | null;
+  by_action: Record<string, { n: number; hit_rate: number | null }>;
+  horizons: HorizonStats[];
+  benchmark_symbol: string | null;
+  window_start: string | null;
+  generated_at: string;
+}
+
+/** Published walk-forward track record (GET /api/backtest). */
+export interface BacktestReport {
+  status: string;
+  generated_at: string;
+  window_start: string;
+  window_end: string;
+  universe: string[];
+  universe_size: number;
+  horizons: HorizonStats[];
+  methodology: string[];
+  notes: string[];
 }
 
 /* ---------------------------- Indian market API ----------------------------- */

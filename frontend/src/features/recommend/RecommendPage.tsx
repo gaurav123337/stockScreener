@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { useToast } from "@/app/useToast";
+import { Disclaimer } from "@/components/Disclaimer";
 import { Section } from "@/components/Section";
 import { RecommendationCard } from "@/components/RecommendationCard";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,7 @@ function parseSymbols(raw: string): string[] {
 
 export default function RecommendPage() {
   const { toast } = useToast();
+  const complianceQuery = useQuery({ queryKey: ["compliance"], queryFn: api.compliance });
   const [input, setInput] = useState("");
   const [rows, setRows] = useState<ScanRow[]>([]);
 
@@ -64,7 +66,10 @@ export default function RecommendPage() {
 
   return (
     <>
-      <Section title="Recommend" sub="Buy/Sell/Hold with entry, target, stop-loss and reasons." />
+      <Section
+        title="Recommend"
+        sub="Buy/Sell/Hold with entry, target, stop-loss and reasons. Educational, not investment advice."
+      />
 
       <div className="grid gap-3">
         <input
@@ -90,6 +95,8 @@ export default function RecommendPage() {
           ))}
         </div>
       )}
+
+      <Disclaimer compliance={complianceQuery.data} />
     </>
   );
 }
