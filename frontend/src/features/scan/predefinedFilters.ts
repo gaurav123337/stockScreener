@@ -6,6 +6,21 @@ import type { PredefinedFilter } from "@/types/api";
  * or temporarily unavailable; a successful API response remains authoritative.
  */
 export const BUILT_IN_FILTERS: PredefinedFilter[] = [
+  {
+    name: "stable_companies",
+    description: "Solid, low-debt companies that are still trending up",
+    guided: true,
+  },
+  {
+    name: "tax_saving",
+    description: "Quality large companies — the closest stock pick to a tax-saving fund",
+    guided: true,
+  },
+  {
+    name: "growth",
+    description: "Companies growing steadily, with reasonable prices",
+    guided: true,
+  },
   { name: "oversold", description: "RSI < 30 - possibly oversold bounce candidates" },
   {
     name: "uptrend",

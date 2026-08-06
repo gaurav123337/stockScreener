@@ -10,6 +10,8 @@ from screener.services.knowledge_service import KnowledgeService
 from screener.services.indian_market_service import IndianMarketService
 from screener.services.preferences_service import PreferencesService
 from screener.services.recommendation_service import RecommendationService
+from screener.services.risk_profile_service import RiskProfileService
+from screener.services.plan_service import PlanService
 from screener.services.scan_service import ScanService
 from screener.services.verification_service import VerificationService
 
@@ -25,6 +27,8 @@ __all__ = [
     "IndianMarketService",
     "PreferencesService",
     "RecommendationService",
+    "RiskProfileService",
+    "PlanService",
     "ScanService",
     "VerificationService",
 ]

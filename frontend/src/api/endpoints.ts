@@ -15,6 +15,7 @@ import type {
   FeedbackReceipt,
   FeedbackRequest,
   FiltersResponse,
+  GlossaryResponse,
   HoldingsResponse,
   IndianEnvelope,
   IndianHistory,
@@ -22,9 +23,13 @@ import type {
   IndianSearchResult,
   IndianStats,
   IndianStock,
+  InvestmentPlan,
   KnowledgeResponse,
   LearnResult,
   Paginated,
+  RiskProfile,
+  RiskProfileResponse,
+  RiskQuestion,
   ScanRequest,
   ScanResponse,
   ScanRow,
@@ -128,6 +133,19 @@ export const api = {
   verify: () => http.get<VerifyResponse>("/api/verify"),
   backtest: () => http.get<BacktestReport>("/api/backtest"),
   backtestRun: () => http.post<BacktestReport>("/api/backtest/run"),
+
+  /* Beginner-first UX: onboarding, risk profile, plan, glossary */
+  onboardingQuestions: () => http.get<{ questions: RiskQuestion[] }>("/api/onboarding/questions"),
+  getRiskProfile: () => http.get<RiskProfileResponse>("/api/risk-profile"),
+  saveRiskProfile: (answers: Record<string, string>) =>
+    http.post<RiskProfile>("/api/risk-profile", { answers }),
+  buildPlan: (body: {
+    risk_level: string;
+    monthly_amount: number;
+    horizon_years: number;
+    goal: string;
+  }) => http.post<InvestmentPlan>("/api/plan", body),
+  glossary: () => http.get<GlossaryResponse>("/api/glossary"),
   compliance: () => http.get<ComplianceResponse>("/api/compliance"),
 
   /* Settings */

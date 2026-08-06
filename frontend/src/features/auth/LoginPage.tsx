@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth-context";
+import { api } from "@/api/endpoints";
 import { ApiError } from "@/api/client";
 import { useToast } from "@/app/useToast";
 import { Button } from "@/components/ui/Button";
@@ -27,7 +28,18 @@ export default function LoginPage() {
     try {
       const profile = await login(email.trim(), password);
       toast("Logged in successfully!");
-      navigate(profile.role === "product_owner" ? "/control-center" : "/recommend", { replace: true });
+      if (profile.role === "product_owner") {
+        navigate("/control-center", { replace: true });
+        return;
+      }
+      // Beginner flow: send a first-time user to the risk questionnaire so the
+      // 3–5 holding starter plan is built on their real answers.
+      try {
+        const risk = await api.getRiskProfile();
+        navigate(risk.level ? "/recommend" : "/onboarding", { replace: true });
+      } catch {
+        navigate("/recommend", { replace: true });
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);

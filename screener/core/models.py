@@ -54,6 +54,26 @@ class StockMetrics(BaseModel):
     near_52w_low: bool = False
 
 
+class DriverScore(BaseModel):
+    """One plain-language driver on a thesis card (Trend/Momentum/Value/Quality)."""
+    key: str                       # trend | momentum | value | quality
+    label: str                     # "Trend"
+    score: float
+    positive: bool | None = None   # None when neutral
+    plain: str                     # one-line beginner explanation
+    why: list[str] = Field(default_factory=list)  # plain-language evidence
+
+
+class Thesis(BaseModel):
+    """Phase-2 beginner-first additions to a recommendation."""
+    risk_badge: str | None = None            # "Low" | "Medium" | "High"
+    portfolio_role: str | None = None        # e.g. "Core holding"
+    allocation_size: float | None = None     # suggested % of equity sleeve (0..1)
+    drivers: list[DriverScore] = Field(default_factory=list)
+    what_could_go_wrong: list[str] = Field(default_factory=list)
+    thesis: str | None = None                # 2-3 sentence plain-language summary
+
+
 class Recommendation(BaseModel):
     """A complete trade recommendation."""
     symbol: str
@@ -73,6 +93,8 @@ class Recommendation(BaseModel):
     # transparency measure (agreement, signal strength, data freshness).
     confidence: float | None = Field(default=None, ge=0, le=1)
     pillars: dict[str, float] = Field(default_factory=dict)
+    # Phase-2 beginner-first additions: plain-language thesis card data.
+    thesis_data: Thesis = Field(default_factory=Thesis)
 
     @computed_field
     @property
@@ -110,6 +132,12 @@ class Recommendation(BaseModel):
             "near_52w_low": m.near_52w_low,
             "reasons": self.reasons,
             "error": self.error,
+            "risk_badge": self.thesis_data.risk_badge,
+            "portfolio_role": self.thesis_data.portfolio_role,
+            "allocation_size": self.thesis_data.allocation_size,
+            "drivers": [d.model_dump() for d in self.thesis_data.drivers],
+            "what_could_go_wrong": self.thesis_data.what_could_go_wrong,
+            "thesis": self.thesis_data.thesis,
         }
 
 
@@ -198,6 +226,54 @@ class BacktestReport(BaseModel):
     horizons: list[HorizonStats] = Field(default_factory=list)
     methodology: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+
+
+class RiskLevel(str, Enum):
+    CONSERVATIVE = "conservative"
+    MODERATE = "moderate"
+    AGGRESSIVE = "aggressive"
+
+
+class RiskProfile(BaseModel):
+    """A user's onboarding risk profile + suggested asset split."""
+    level: RiskLevel
+    label: str
+    summary: str
+    asset_split: dict[str, float]           # equity_delivery / mutual_funds / liquid
+    expected_return_range: list[float] = Field(default_factory=list)  # [low, high] p.a.
+    answers: dict[str, str] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class PlanBasketItem(BaseModel):
+    """One holding in a goal-based starter basket."""
+    symbol: str
+    name: str | None = None
+    sector: str | None = None
+    role: str = ""
+    weight: float = 0.0          # share of the equity sleeve (0..1)
+    score: float = 0.0
+    action: Action = Action.HOLD
+    price: float = 0.0
+    plain: str = ""              # why this stock, in plain language
+    risk_badge: str | None = None
+    driver_highlights: list[str] = Field(default_factory=list)
+
+
+class InvestmentPlan(BaseModel):
+    """A goal-based starter basket + asset split for a beginner."""
+    risk_level: RiskLevel
+    risk_label: str = ""
+    goal: str = ""
+    monthly_amount: float = 0.0
+    horizon_years: int = 0
+    asset_split: dict[str, float] = Field(default_factory=dict)
+    basket: list[PlanBasketItem] = Field(default_factory=list)
+    mutual_funds: list[str] = Field(default_factory=list)
+    expected_return_range: list[float] = Field(default_factory=list)
+    conservative_return_range: list[float] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.now)
 
 
 class LearnResult(BaseModel):

@@ -12,6 +12,7 @@ from screener.core.container import container
 from screener.core.indicators import add_all
 from screener.core.interfaces import MarketDataProvider
 from screener.core.models import Action, Recommendation, StockMetrics
+from screener.services.plain_language import build_thesis
 from screener.services.scoring_engine import ScoringEngine
 
 
@@ -95,7 +96,7 @@ class AnalysisService:
         # Assemble metrics
         metrics = self._build_metrics(price, last, info)
 
-        return Recommendation(
+        rec = Recommendation(
             symbol=self._data.normalize_symbol(resolved),
             action=action,
             score=score,
@@ -109,6 +110,10 @@ class AnalysisService:
             confidence=confidence,
             pillars=pillars,
         )
+        # Phase-2: beginner-first plain-language thesis card (drivers, risk
+        # badge, role, allocation, "what could go wrong").
+        rec.thesis_data = build_thesis(rec)
+        return rec
 
     def _build_levels(
         self,

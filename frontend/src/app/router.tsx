@@ -21,12 +21,16 @@ const ResetPasswordPage = lazy(() => import("@/features/auth/ResetPasswordPage")
 const VerifyEmailPage = lazy(() => import("@/features/auth/VerifyEmailPage"));
 const IndianMarketPage = lazy(() => import("@/features/indian-market/IndianMarketPage"));
 const TrackRecordPage = lazy(() => import("@/features/track-record/TrackRecordPage"));
+const OnboardingPage = lazy(() => import("@/features/onboarding/OnboardingPage"));
+const PlanPage = lazy(() => import("@/features/plan/PlanPage"));
+const PortfolioPage = lazy(() => import("@/features/portfolio/PortfolioPage"));
 const ControlCenterLayout = lazy(() => import("@/features/control-center/ControlCenterLayout"));
 const OverviewPage = lazy(() => import("@/features/control-center/OverviewPage"));
 const UsersPage = lazy(() => import("@/features/control-center/UsersPage"));
 const FeedbackOpsPage = lazy(() => import("@/features/control-center/FeedbackOpsPage"));
 const ConfigPage = lazy(() => import("@/features/control-center/ConfigPage"));
 const AuditPage = lazy(() => import("@/features/control-center/AuditPage"));
+const IndexRedirect = lazy(() => import("./IndexRedirect"));
 
 export const router = createHashRouter([
   {
@@ -43,8 +47,11 @@ export const router = createHashRouter([
   {
     element: <AppLayout />,
     children: [
-      { index: true, element: <Navigate to="/recommend" replace /> },
+      { index: true, element: <IndexRedirect /> },
       { path: "recommend", element: <RecommendPage /> },
+      { path: "onboarding", element: <OnboardingPage /> },
+      { path: "plan", element: <PlanPage /> },
+      { path: "portfolio", element: <PortfolioPage /> },
       { path: "scan", element: <ScanPage /> },
       { path: "train", element: <TrainPage /> },
       { path: "brokers", element: <BrokersPage /> },

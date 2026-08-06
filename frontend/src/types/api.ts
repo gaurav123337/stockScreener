@@ -173,6 +173,95 @@ export interface ScanRow {
   roe: number | null;
   reasons: string[] | null;
   error?: string | null;
+  /* ---- Phase-2 thesis-card additions (plain language) ---- */
+  risk_badge?: string | null;
+  portfolio_role?: string | null;
+  /** Suggested share of the equity sleeve (0..1); null = don't add yet. */
+  allocation_size?: number | null;
+  drivers?: DriverScore[];
+  what_could_go_wrong?: string[];
+  thesis?: string | null;
+}
+
+/** One plain-language driver on a thesis card. */
+export interface DriverScore {
+  key: "trend" | "momentum" | "value" | "quality";
+  label: string;
+  score: number;
+  positive: boolean | null;
+  plain: string;
+  why: string[];
+}
+
+/* ------------------------- Onboarding / risk profile ----------------------- */
+
+export interface RiskOption {
+  value: string;
+  label: string;
+}
+
+export interface RiskQuestion {
+  id: string;
+  question: string;
+  options: RiskOption[];
+}
+
+export type RiskLevel = "conservative" | "moderate" | "aggressive";
+
+export interface RiskProfile {
+  level: RiskLevel;
+  label: string;
+  summary: string;
+  asset_split: { equity_delivery: number; mutual_funds: number; liquid: number };
+  expected_return_range: number[];
+  answers: Record<string, string>;
+  created_at?: string;
+}
+
+export interface RiskProfileResponse {
+  level: RiskLevel | null;
+  label?: string;
+  summary?: string;
+  asset_split?: RiskProfile["asset_split"];
+  expected_return_range?: number[];
+  answers?: Record<string, string>;
+}
+
+/* --------------------------------- Plan ------------------------------------ */
+
+export interface PlanBasketItem {
+  symbol: string;
+  name: string | null;
+  sector: string | null;
+  role: string;
+  weight: number;
+  score: number;
+  action: Action;
+  price: number;
+  plain: string;
+  risk_badge: string | null;
+  driver_highlights: string[];
+}
+
+export interface InvestmentPlan {
+  risk_level: RiskLevel;
+  risk_label: string;
+  goal: string;
+  monthly_amount: number;
+  horizon_years: number;
+  asset_split: RiskProfile["asset_split"];
+  basket: PlanBasketItem[];
+  mutual_funds: string[];
+  expected_return_range: number[];
+  conservative_return_range: number[];
+  notes: string[];
+  generated_at: string;
+}
+
+/* --------------------------------- Glossary -------------------------------- */
+
+export interface GlossaryResponse {
+  terms: Record<string, { term: string; plain: string }>;
 }
 
 export interface ScanRequest {
@@ -210,6 +299,8 @@ export interface ComplianceResponse {
 export interface PredefinedFilter {
   name: string;
   description: string;
+  /** Phase-2: guided beginner presets are flagged so the UI shows them first. */
+  guided?: boolean;
 }
 
 export interface FiltersResponse {

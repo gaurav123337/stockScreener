@@ -51,6 +51,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    allowedHosts: [".monkeycode-ai.live"],
     proxy: {
       "/api": {
         target: API_TARGET,

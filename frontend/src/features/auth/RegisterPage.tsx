@@ -39,7 +39,7 @@ export default function RegisterPage() {
     try {
       await register(email.trim(), password, confirm, displayName.trim() || undefined);
       toast("Account created. Check your email to verify it.");
-      navigate("/recommend", { replace: true });
+      navigate("/onboarding", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);

@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import {
   BarChart3,
   BrainCircuit,
+  Briefcase,
   CircleHelp,
   Command,
   Download,
@@ -20,6 +21,7 @@ import {
   Plus,
   ScanSearch,
   Settings,
+  Sparkles,
   Sun,
   TrendingUp,
   UserRound,
@@ -37,6 +39,8 @@ interface NavigationItem {
 
 const PRIMARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
   { to: "/recommend", icon: TrendingUp, label: "Recommended" },
+  { to: "/plan", icon: Sparkles, label: "My Plan" },
+  { to: "/portfolio", icon: Briefcase, label: "My Portfolio" },
   { to: "/scan", icon: ScanSearch, label: "Scan" },
   { to: "/indian-market", icon: Landmark, label: "Indian Market" },
   { to: "/track-record", icon: BarChart3, label: "Track Record" },

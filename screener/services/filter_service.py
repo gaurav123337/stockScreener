@@ -12,10 +12,19 @@ from screener.core.plugins import registry
 class PredefinedFilter(FilterStrategy):
     """A named filter with a description and predicate."""
 
-    def __init__(self, name: str, description: str, predicate: Callable[[dict], bool]):
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        predicate: Callable[[dict], bool],
+        guided: bool = False,
+    ):
         self._name = name
         self._description = description
         self._predicate = predicate
+        # Phase-2: guided presets are plain-language beginner screens ("I want
+        # stable companies") shown first, before technical filters.
+        self._guided = guided
 
     @property
     def name(self) -> str:
@@ -24,6 +33,10 @@ class PredefinedFilter(FilterStrategy):
     @property
     def description(self) -> str:
         return self._description
+
+    @property
+    def guided(self) -> bool:
+        return self._guided
 
     def matches(self, row: dict) -> bool:
         return self._predicate(row)
@@ -91,7 +104,21 @@ class FilterService:
         self._register_defaults()
 
     def _register_defaults(self) -> None:
-        """Register built-in filters."""
+        """Register built-in filters (guided beginner presets first)."""
+        guided = [
+            ("stable_companies", "I want stable companies",
+             lambda r: (r.get("roe") is not None and r["roe"] > 0.15)
+             and (r.get("debt_to_equity") is None or r["debt_to_equity"] < 100)
+             and bool(r.get("above_sma200"))),
+            ("tax_saving", "I want to save tax",
+             lambda r: (r.get("roe") is not None and r["roe"] > 0.12)
+             and (r.get("pe") is None or r["pe"] < 45)
+             and bool(r.get("above_sma50"))),
+            ("growth", "I want growth",
+             lambda r: r.get("score") is not None and r["score"] >= 30
+             and (r.get("roe") is None or r["roe"] >= 0.12)
+             and (r.get("pe") is None or r["pe"] < 60)),
+        ]
         defaults = [
             ("oversold", "RSI < 30 - possibly oversold bounce candidates",
              lambda r: r.get("rsi") is not None and r["rsi"] < 30),
@@ -114,6 +141,8 @@ class FilterService:
             ("sell_signals", "Current action == SELL",
              lambda r: r.get("action") == "SELL"),
         ]
+        for name, desc, predicate in guided:
+            registry.register_filter(PredefinedFilter(name, desc, predicate, guided=True))
         for name, desc, predicate in defaults:
             registry.register_filter(PredefinedFilter(name, desc, predicate))
 
@@ -125,7 +154,6 @@ class FilterService:
 
     def list_filters(self) -> list[dict[str, str]]:
         return registry.list_filters()
-
     def get_filter_fields(self) -> list[str]:
         """Fields available for custom expressions."""
         return [

@@ -57,6 +57,8 @@ from screener.services import (
     KnowledgeService,
     PreferencesService,
     RecommendationService,
+    RiskProfileService,
+    PlanService,
     ScanService,
     VerificationService,
     IndianMarketService,
@@ -274,6 +276,17 @@ class PreferencesBody(BaseModel):
 
 class WatchlistBody(BaseModel):
     symbols: list[str] = Field(..., max_length=200)
+
+
+class RiskProfileBody(BaseModel):
+    answers: dict[str, str] = Field(..., max_length=20)
+
+
+class PlanBody(BaseModel):
+    risk_level: str = Field(..., min_length=1, max_length=20)
+    monthly_amount: float = Field(0, ge=0, le=1_000_000_000)
+    horizon_years: int = Field(1, ge=0, le=80)
+    goal: str = Field("wealth", max_length=30)
 
 
 class FeedbackBody(FeedbackSubmission):
@@ -521,6 +534,56 @@ def set_watchlist(body: WatchlistBody, user: UserProfile = Depends(get_current_u
     """Set the current user's personal watchlist."""
     prefs = get_service(PreferencesService)
     return {"symbols": prefs.set_watchlist(user.user_id, body.symbols)}
+
+
+# --------------------------------------------------------------------------- #
+# Beginner-first UX: onboarding, risk profile, goal-based plan, glossary
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/onboarding/questions")
+def onboarding_questions(user: UserProfile = Depends(get_current_user)):
+    """The plain-language risk questionnaire (no stock-market vocabulary)."""
+    return {"questions": get_service(RiskProfileService).questions()}
+
+
+@app.get("/api/risk-profile")
+def get_risk_profile(user: UserProfile = Depends(get_current_user)):
+    """The current user's saved risk profile (or null if not onboarded)."""
+    profile = get_service(RiskProfileService).get_profile(user.user_id)
+    return profile.model_dump(mode="json") if profile else {"level": None}
+
+
+@app.post("/api/risk-profile")
+def save_risk_profile(body: RiskProfileBody, user: UserProfile = Depends(get_current_user)):
+    """Score and persist the user's risk profile from questionnaire answers."""
+    profile = get_service(RiskProfileService).save_profile(user.user_id, body.answers)
+    return profile.model_dump(mode="json")
+
+
+@app.post("/api/plan")
+def build_plan(body: PlanBody, user: UserProfile = Depends(get_current_user)):
+    """Build a goal-based starter basket from a risk profile + amount + horizon."""
+    preferences = get_service(PreferencesService)
+    effective_config = preferences.get_effective_config(user.user_id)
+    try:
+        plan = get_service(PlanService).build_plan(
+            risk_level=body.risk_level,
+            monthly_amount=body.monthly_amount,
+            horizon_years=body.horizon_years,
+            goal=body.goal,
+            app_config=effective_config,
+        )
+    except Exception as e:
+        raise DataSourceError(f"Plan could not be built: {e}")
+    return plan.model_dump(mode="json")
+
+
+@app.get("/api/glossary")
+def get_glossary(user: UserProfile = Depends(get_current_user)):
+    """Plain-language definitions for every metric a beginner might see."""
+    from screener.services.plain_language import glossary
+    return {"terms": glossary()}
+
 
 
 # --------------------------------------------------------------------------- #
