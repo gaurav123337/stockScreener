@@ -1,5 +1,6 @@
-"""Goal-based plan generator tests (no network — stubbed analysis)."""
+"""Goal-based plan generator tests (no network — stubbed analysis + funds)."""
 from screener.core.models import Action, Recommendation, RiskLevel, StockMetrics
+from screener.services.mutual_fund_service import MutualFundService
 from screener.services.plan_service import CANDIDATE_UNIVERSE, PlanService
 
 SECTORS = ["Technology", "Banking", "Energy", "FMCG", "Auto"]
@@ -46,8 +47,18 @@ class StubAnalysis:
         )
 
 
+class StubFundService(MutualFundService):
+    """Never touches the network — lets the plan fall back to text funds."""
+
+    def recommend(self, *args, **kwargs):
+        raise RuntimeError("no network in plan tests")
+
+
 def _plan(analysis=None, **kwargs):
-    service = PlanService(analysis_service=analysis or StubAnalysis())
+    service = PlanService(
+        analysis_service=analysis or StubAnalysis(),
+        fund_service=StubFundService(client=None),
+    )
     defaults = {"risk_level": "moderate", "monthly_amount": 10000, "horizon_years": 10, "goal": "wealth"}
     defaults.update(kwargs)
     return service.build_plan(**defaults)

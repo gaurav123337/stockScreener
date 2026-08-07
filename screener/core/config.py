@@ -130,6 +130,29 @@ class IndianApiConfig(BaseSettings):
         return value
 
 
+class MutualFundConfig(BaseSettings):
+    """Phase-3 mutual-fund data (AMFI NAV feed, mirrored by mfapi.in)."""
+    model_config = SettingsConfigDict(env_prefix="SCREENER_MF_")
+
+    enabled: bool = True
+    # Free mirror of the official AMFI NAV data (scheme master + daily NAVs
+    # + historical NAV series + SEBI scheme category). AMFI's own endpoint is
+    # frequently unreachable from datacenter IPs, so the mirror is the
+    # reliable free source; the data itself is the AMFI NAV file.
+    base_url: str = "https://api.mfapi.in"
+    timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    # How long the cached scheme universe / scheme details stay fresh.
+    # Daily refresh (AMFI publishes NAV once a day) with visible timestamps.
+    cache_ttl_seconds: int = Field(default=86_400, ge=300, le=604_800)
+    max_workers: int = Field(default=8, ge=1, le=32)
+    # Universe caps so a first build stays fast and polite to the feed.
+    universe_max: int = Field(default=220, ge=20, le=800)
+    per_category_max: int = Field(default=40, ge=5, le=200)
+    per_amc_per_category: int = Field(default=6, ge=1, le=50)
+    # Risk-free rate used for Sharpe/Sortino (approx 10-yr g-sec yield).
+    risk_free_rate: float = Field(default=0.065, ge=0, le=0.20)
+
+
 class ComplianceConfig(BaseSettings):
     """Trust / compliance framing surfaced alongside every recommendation.
 
@@ -175,6 +198,7 @@ class AppConfig(BaseSettings):
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
     indian_api: IndianApiConfig = Field(default_factory=IndianApiConfig)
+    mutual_fund: MutualFundConfig = Field(default_factory=MutualFundConfig)
     market_data_provider: Literal["yahoo", "indian_api", "hybrid"] = "yahoo"
 
     # Which adapter backs the Indian market workspace. Both providers conform
@@ -243,9 +267,29 @@ class AppConfig(BaseSettings):
     def backtest_report_file(self) -> Path:
         return self.data_dir / "backtest_report.json"
 
+    # ---- Phase-3 mutual-fund cache paths ----
+    @property
+    def mf_dir(self) -> Path:
+        return self.data_dir / "mf"
+
+    @property
+    def mf_master_file(self) -> Path:
+        return self.mf_dir / "master.json"
+
+    @property
+    def mf_universe_file(self) -> Path:
+        return self.mf_dir / "universe.json"
+
+    @property
+    def mf_scheme_dir(self) -> Path:
+        return self.mf_dir / "schemes"
+
+    def mf_scheme_file(self, scheme_code: int) -> Path:
+        return self.mf_scheme_dir / f"{scheme_code}.json"
+
     def ensure_directories(self) -> None:
         """Create all required directories if they don't exist."""
-        for d in (self.data_dir, self.knowledge_dir, self.knowledge_graph_dir):
+        for d in (self.data_dir, self.knowledge_dir, self.knowledge_graph_dir, self.mf_dir, self.mf_scheme_dir):
             d.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------ #

@@ -45,6 +45,7 @@ from screener.core.responses import (
     NotFoundError,
     ValidationError,
 )
+from screener.core.mf_models import FundScreenerRequest
 from screener.core.user_models import UserCreate, UserLogin, UserProfile
 from screener.services import (
     AnalysisService,
@@ -55,6 +56,7 @@ from screener.services import (
     FeedbackService,
     FilterService,
     KnowledgeService,
+    MutualFundService,
     PreferencesService,
     RecommendationService,
     RiskProfileService,
@@ -110,6 +112,17 @@ async def lifespan(app: FastAPI):
             pass
 
     Thread(target=_warm_backtest, daemon=True).start()
+
+    # Phase-3: warm the mutual-fund universe (AMFI NAV feed) in the background
+    # so the first screener call reads the cached universe instead of building
+    # it inline. Reuses the daily disk cache, so restarts are cheap.
+    def _warm_mutual_funds():
+        try:
+            get_service(MutualFundService).universe()
+        except Exception:
+            pass
+
+    Thread(target=_warm_mutual_funds, daemon=True).start()
     yield
 
 
@@ -287,6 +300,26 @@ class PlanBody(BaseModel):
     monthly_amount: float = Field(0, ge=0, le=1_000_000_000)
     horizon_years: int = Field(1, ge=0, le=80)
     goal: str = Field("wealth", max_length=30)
+
+
+class FundRecommendBody(BaseModel):
+    risk_level: str = Field(..., min_length=1, max_length=20)
+    goal: str = Field("wealth", max_length=30)
+    monthly_amount: float = Field(0, ge=0, le=1_000_000_000)
+    horizon_years: int = Field(5, ge=0, le=80)
+
+
+class FundCompareBody(BaseModel):
+    codes: list[int] = Field(..., min_length=2, max_length=4)
+
+
+class SipBody(BaseModel):
+    mode: str = Field("sip", max_length=20)
+    monthly_amount: float = Field(0, ge=0, le=1_000_000_000)
+    lumpsum_amount: float = Field(0, ge=0, le=1_000_000_000)
+    years: int = Field(10, ge=1, le=50)
+    assumed_return_pct: float = Field(12, ge=0, le=60)
+    step_up_pct: float = Field(0, ge=0, le=50)
 
 
 class FeedbackBody(FeedbackSubmission):
@@ -583,6 +616,122 @@ def get_glossary(user: UserProfile = Depends(get_current_user)):
     """Plain-language definitions for every metric a beginner might see."""
     from screener.services.plain_language import glossary
     return {"terms": glossary()}
+
+
+# --------------------------------------------------------------------------- #
+# Phase-3: Mutual-fund pillar (AMFI NAV feed)
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/mutual-funds/status")
+def mutual_fund_status(user: UserProfile = Depends(get_current_user)):
+    """Universe size, data source, and last-refresh timestamp."""
+    try:
+        return get_service(MutualFundService).status()
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund data unavailable: {e}")
+
+
+@app.get("/api/mutual-funds/categories")
+def mutual_fund_categories(user: UserProfile = Depends(get_current_user)):
+    """The beginner-friendly SEBI buckets used by the screener."""
+    return {"categories": get_service(MutualFundService).categories()}
+
+
+@app.get("/api/mutual-funds/screener")
+def mutual_fund_screener(
+    category: str = "",
+    max_expense_ratio: float | None = None,
+    min_aum_cr: float | None = None,
+    min_return_1y: float | None = None,
+    min_return_3y: float | None = None,
+    min_return_5y: float | None = None,
+    max_risk_rating: int | None = None,
+    min_fund_age_years: float | None = None,
+    manager: str = "",
+    elss_only: bool = False,
+    direct_only: bool = True,
+    sort_by: str = "sharpe",
+    sort_dir: str = "desc",
+    limit: int = 50,
+    offset: int = 0,
+    user: UserProfile = Depends(get_current_user),
+):
+    """Screen the direct-plan universe by category / cost / returns / risk."""
+    request = FundScreenerRequest(
+        category=category or None,
+        max_expense_ratio=max_expense_ratio,
+        min_aum_cr=min_aum_cr,
+        min_return_1y=min_return_1y,
+        min_return_3y=min_return_3y,
+        min_return_5y=min_return_5y,
+        max_risk_rating=max_risk_rating,
+        min_fund_age_years=min_fund_age_years,
+        manager=manager.strip() or None,
+        elss_only=elss_only,
+        direct_only=direct_only,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        limit=limit,
+        offset=offset,
+    )
+    try:
+        result = get_service(MutualFundService).screener(request)
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund screener failed: {e}")
+    return result.model_dump(mode="json")
+
+
+@app.get("/api/mutual-funds/{scheme_code}")
+def mutual_fund_detail(scheme_code: int, user: UserProfile = Depends(get_current_user)):
+    """Full scheme detail + trailing NAV history."""
+    try:
+        detail = get_service(MutualFundService).detail(scheme_code)
+    except LookupError:
+        raise NotFoundError(f"Mutual fund scheme {scheme_code} not found")
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund detail failed: {e}")
+    return detail.model_dump(mode="json")
+
+
+@app.post("/api/mutual-funds/recommend")
+def mutual_fund_recommend(body: FundRecommendBody, user: UserProfile = Depends(get_current_user)):
+    """A profiled direct-plan fund basket for a risk profile + goal."""
+    try:
+        basket = get_service(MutualFundService).recommend(
+            risk_level=body.risk_level,
+            goal=body.goal,
+            monthly_amount=body.monthly_amount,
+            horizon_years=body.horizon_years,
+        )
+    except ValueError as e:
+        raise ValidationError(f"Invalid risk level: {e}")
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund recommendation failed: {e}")
+    return basket.model_dump(mode="json")
+
+
+@app.post("/api/mutual-funds/compare")
+def mutual_fund_compare(body: FundCompareBody, user: UserProfile = Depends(get_current_user)):
+    """Side-by-side comparison of 2-4 schemes."""
+    try:
+        comparison = get_service(MutualFundService).compare(body.codes)
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund comparison failed: {e}")
+    return comparison.model_dump(mode="json")
+
+
+@app.post("/api/mutual-funds/sip")
+def mutual_fund_sip(body: SipBody, user: UserProfile = Depends(get_current_user)):
+    """SIP / lumpsum / step-up projection (educational, not a forecast)."""
+    result = get_service(MutualFundService).sip_calculator(
+        mode=body.mode,
+        monthly_amount=body.monthly_amount,
+        lumpsum_amount=body.lumpsum_amount,
+        years=body.years,
+        assumed_return_pct=body.assumed_return_pct,
+        step_up_pct=body.step_up_pct,
+    )
+    return result.model_dump(mode="json")
 
 
 

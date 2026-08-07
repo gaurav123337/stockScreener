@@ -25,6 +25,7 @@ from screener.core.models import (
     RiskLevel,
 )
 from screener.services.analysis_service import AnalysisService
+from screener.services.mutual_fund_service import MutualFundService
 from screener.services.plain_language import build_thesis
 from screener.services.risk_profile_service import (
     PROFILE_LABELS,
@@ -71,8 +72,13 @@ CONSERVATIVE_RETURN_RANGES: dict[RiskLevel, list[float]] = {
 class PlanService:
     """Build a beginner-friendly investment plan from a risk profile."""
 
-    def __init__(self, analysis_service: AnalysisService | None = None):
+    def __init__(
+        self,
+        analysis_service: AnalysisService | None = None,
+        fund_service: MutualFundService | None = None,
+    ):
         self._analysis = analysis_service or AnalysisService()
+        self._funds = fund_service or MutualFundService()
 
     # ------------------------------------------------------------------ #
     # Public entry point
@@ -127,6 +133,22 @@ class PlanService:
             "Mutual-fund part handles the rest of the diversification for you; the fund examples are starting points to research, not endorsements.",
         ]
 
+        # Phase-3: fill the fund sleeve with concrete direct-plan schemes when
+        # the AMFI feed is available (falls back to the text list above).
+        fund_schemes: list[dict[str, Any]] = []
+        fund_data_as_of: datetime | None = None
+        try:
+            basket_funds = self._funds.recommend(
+                risk_level=level,
+                goal=goal,
+                monthly_amount=amount,
+                horizon_years=horizon,
+            )
+            fund_schemes = [s.model_dump(mode="json") for s in basket_funds.schemes]
+            fund_data_as_of = basket_funds.data_as_of
+        except Exception:
+            pass  # keep the plain-text fund suggestions as the fallback
+
         return InvestmentPlan(
             risk_level=level,
             risk_label=PROFILE_LABELS[level],
@@ -139,6 +161,8 @@ class PlanService:
             expected_return_range=list(RETURN_RANGES[level]),
             conservative_return_range=list(CONSERVATIVE_RETURN_RANGES[level]),
             notes=notes,
+            fund_schemes=fund_schemes,
+            fund_data_as_of=fund_data_as_of,
             generated_at=datetime.now(),
         )
 

@@ -245,15 +245,60 @@ export default function PlanPage() {
           </Card>
 
           <Card>
-            <div className="flex items-start gap-2">
-              <ShieldQuestion className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
-              <CardTitle>Mutual-fund suggestions</CardTitle>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <ShieldQuestion className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+                <CardTitle>Mutual funds for your plan</CardTitle>
+              </div>
+              <Button
+                variant="secondary"
+                fullWidth={false}
+                onClick={() => navigate("/mutual-funds")}
+              >
+                Compare funds <ArrowRight className="size-4" aria-hidden />
+              </Button>
             </div>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-muted">
-              {displayPlan.mutual_funds.map((fund) => (
-                <li key={fund}>{fund}</li>
-              ))}
-            </ul>
+            {displayPlan.fund_schemes.length > 0 ? (
+              <div className="mt-3 grid gap-3">
+                {displayPlan.fund_schemes.map((fund) => (
+                  <div
+                    key={fund.scheme_code}
+                    className="rounded-lg border border-border bg-surface-raised p-3"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="text-[15px] font-bold text-ink">
+                        {fund.fund_house} {fund.scheme_name.replace(/ - Direct Plan.*/, "").replace(new RegExp(`^${fund.fund_house ?? ""}\\s*`), "")}
+                      </span>
+                      <span className="text-sm font-bold text-brand">{pct(fund.weight)}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {fund.badges.map((badge) => (
+                        <span key={badge} className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-bold text-sky-600 dark:text-sky-400">
+                          {badge}
+                        </span>
+                      ))}
+                      {fund.expense_ratio != null && (
+                        <span className="text-[11px] text-muted">
+                          {fund.expense_ratio.toFixed(2)}% expense ratio
+                        </span>
+                      )}
+                      {fund.returns.three_year != null && (
+                        <span className="text-[11px] text-muted">
+                          ~{pct(fund.returns.three_year)}/yr over 3 yrs
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[13px] leading-5 text-ink">{fund.plain}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-muted">
+                {displayPlan.mutual_funds.map((fund) => (
+                  <li key={fund}>{fund}</li>
+                ))}
+              </ul>
+            )}
           </Card>
 
           <Card>

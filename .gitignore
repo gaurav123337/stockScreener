@@ -27,6 +27,9 @@ data/fundamentals_cache.json
 data/history_cache.json
 data/backtest_report.json
 
+# AMFI mutual-fund NAV cache (regenerated daily)
+data/mf/
+
 # Learned knowledge manifest (local state)
 knowledge_graph/.learn_manifest.json
 

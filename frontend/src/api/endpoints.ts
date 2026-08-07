@@ -15,6 +15,12 @@ import type {
   FeedbackReceipt,
   FeedbackRequest,
   FiltersResponse,
+  FundBasket,
+  FundCategory,
+  FundComparison,
+  FundDetail,
+  FundScreenerResult,
+  FundStatus,
   GlossaryResponse,
   HoldingsResponse,
   IndianEnvelope,
@@ -36,6 +42,7 @@ import type {
   SearchResponse,
   Settings,
   SettingsPatch,
+  SipResult,
   UserProfile,
   VerifyResponse,
   BacktestReport,
@@ -210,4 +217,37 @@ export const api = {
       `/api/indian-market/stock/${encodeURIComponent(stockId)}/forecasts${query.size ? `?${query}` : ""}`,
     );
   },
+
+  /* Mutual funds (Phase 3 — AMFI NAV feed) */
+  mutualFundStatus: () => http.get<FundStatus>("/api/mutual-funds/status"),
+  mutualFundCategories: () => http.get<{ categories: { value: FundCategory; label: string }[] }>(
+    "/api/mutual-funds/categories",
+  ),
+  mutualFundScreener: (params: Record<string, string | number | boolean | undefined>) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== "") query.set(key, String(value));
+    }
+    return http.get<FundScreenerResult>(
+      `/api/mutual-funds/screener${query.size ? `?${query}` : ""}`,
+    );
+  },
+  mutualFundDetail: (schemeCode: number) =>
+    http.get<FundDetail>(`/api/mutual-funds/${schemeCode}`),
+  mutualFundRecommend: (body: {
+    risk_level: string;
+    goal: string;
+    monthly_amount: number;
+    horizon_years: number;
+  }) => http.post<FundBasket>("/api/mutual-funds/recommend", body),
+  mutualFundCompare: (codes: number[]) =>
+    http.post<FundComparison>("/api/mutual-funds/compare", { codes }),
+  mutualFundSip: (body: {
+    mode: string;
+    monthly_amount?: number;
+    lumpsum_amount?: number;
+    years: number;
+    assumed_return_pct?: number;
+    step_up_pct?: number;
+  }) => http.post<SipResult>("/api/mutual-funds/sip", body),
 };

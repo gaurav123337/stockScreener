@@ -8,6 +8,7 @@ from screener.services.feedback_service import FeedbackService
 from screener.services.filter_service import FilterService
 from screener.services.knowledge_service import KnowledgeService
 from screener.services.indian_market_service import IndianMarketService
+from screener.services.mutual_fund_service import MutualFundService
 from screener.services.preferences_service import PreferencesService
 from screener.services.recommendation_service import RecommendationService
 from screener.services.risk_profile_service import RiskProfileService
@@ -25,6 +26,7 @@ __all__ = [
     "FilterService",
     "KnowledgeService",
     "IndianMarketService",
+    "MutualFundService",
     "PreferencesService",
     "RecommendationService",
     "RiskProfileService",

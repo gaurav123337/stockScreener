@@ -11,6 +11,7 @@ from screener.core.interfaces import (
     MarketDataProvider,
     PredictionRepository,
 )
+from screener.infrastructure.data.amfi_client import AmfiClient
 from screener.infrastructure.data.yahoo_provider import YahooDataProvider
 from screener.infrastructure.data.indian_api_client import IndianApiClient
 from screener.infrastructure.data.yahoo_indian_provider import YahooIndianProvider
@@ -34,6 +35,7 @@ from screener.services import (
     ScanService,
     VerificationService,
     IndianMarketService,
+    MutualFundService,
 )
 from screener.core.indian_market import IndianMarketGateway
 
@@ -71,6 +73,10 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(RiskProfileService, RiskProfileService)
     container.register(PlanService, PlanService)
     container.register(IndianMarketService, factory=lambda: IndianMarketService(get_service(IndianMarketGateway)))
+    container.register(
+        MutualFundService,
+        factory=lambda: MutualFundService(client=AmfiClient()),
+    )
 
 
 def get_service(service_type):

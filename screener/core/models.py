@@ -274,6 +274,11 @@ class InvestmentPlan(BaseModel):
     conservative_return_range: list[float] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.now)
+    # Phase-3: concrete direct-plan fund schemes for the fund sleeve
+    # (FundRecommendation payloads, kept as dicts to avoid a model dependency
+    # cycle between core.models and core.mf_models).
+    fund_schemes: list[dict[str, Any]] = Field(default_factory=list)
+    fund_data_as_of: datetime | None = None
 
 
 class LearnResult(BaseModel):

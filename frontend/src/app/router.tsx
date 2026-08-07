@@ -20,6 +20,7 @@ const ForgotPasswordPage = lazy(() => import("@/features/auth/ForgotPasswordPage
 const ResetPasswordPage = lazy(() => import("@/features/auth/ResetPasswordPage"));
 const VerifyEmailPage = lazy(() => import("@/features/auth/VerifyEmailPage"));
 const IndianMarketPage = lazy(() => import("@/features/indian-market/IndianMarketPage"));
+const MutualFundsPage = lazy(() => import("@/features/mutual-funds/MutualFundsPage"));
 const TrackRecordPage = lazy(() => import("@/features/track-record/TrackRecordPage"));
 const OnboardingPage = lazy(() => import("@/features/onboarding/OnboardingPage"));
 const PlanPage = lazy(() => import("@/features/plan/PlanPage"));
@@ -56,6 +57,7 @@ export const router = createHashRouter([
       { path: "train", element: <TrainPage /> },
       { path: "brokers", element: <BrokersPage /> },
       { path: "indian-market", element: <IndianMarketPage /> },
+      { path: "mutual-funds", element: <MutualFundsPage /> },
       { path: "track-record", element: <TrackRecordPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "guide", element: <GuidePage /> },

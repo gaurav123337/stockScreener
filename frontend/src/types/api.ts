@@ -256,6 +256,8 @@ export interface InvestmentPlan {
   conservative_return_range: number[];
   notes: string[];
   generated_at: string;
+  fund_schemes: FundRecommendation[];
+  fund_data_as_of: string | null;
 }
 
 /* --------------------------------- Glossary -------------------------------- */
@@ -454,4 +456,149 @@ export interface IndianHistory {
 export interface IndianStats {
   stock_id: string;
   stats: unknown;
+}
+
+/* --------------------------- Mutual funds (Phase 3) -------------------------- */
+
+export type FundCategory =
+  | "large_cap"
+  | "mid_cap"
+  | "small_cap"
+  | "flexi_cap"
+  | "multi_cap"
+  | "value"
+  | "elss"
+  | "index"
+  | "liquid"
+  | "debt"
+  | "hybrid"
+  | "other";
+
+export interface FundReturns {
+  one_year: number | null;
+  three_year: number | null;
+  five_year: number | null;
+  ten_year: number | null;
+  since_inception: number | null;
+}
+
+/** Risk-adjusted stats from NAV history — a record of the past, not a forecast. */
+export interface FundRisk {
+  rating: number | null;
+  rating_label: string | null;
+  volatility_annual: number | null;
+  sharpe: number | null;
+  sortino: number | null;
+  max_drawdown: number | null;
+}
+
+export interface FundScheme {
+  scheme_code: number;
+  scheme_name: string;
+  fund_house: string | null;
+  category: FundCategory;
+  sebi_category: string | null;
+  is_direct: boolean;
+  is_growth: boolean;
+  is_elss: boolean;
+  nav: number | null;
+  nav_date: string | null;
+  isin_growth: string | null;
+  expense_ratio: number | null;
+  aum_cr: number | null;
+  launch_date: string | null;
+  fund_manager: string | null;
+  exit_load: string | null;
+  returns: FundReturns;
+  risk: FundRisk;
+  fund_age_years: number | null;
+  data_as_of: string | null;
+  source: string;
+  badges: string[];
+}
+
+export interface FundScreenerResult {
+  items: FundScheme[];
+  total: number;
+  categories: { value: FundCategory; label: string }[];
+  sort_by: string;
+  sort_dir: string;
+  data_as_of: string | null;
+  refreshed_at: string;
+  source: string;
+  stale: boolean;
+  note: string | null;
+}
+
+export interface FundAllocation {
+  category: FundCategory;
+  weight: number;
+  advice: string;
+}
+
+export interface FundRecommendation {
+  scheme_code: number;
+  scheme_name: string;
+  fund_house: string | null;
+  category: FundCategory;
+  sebi_category: string | null;
+  is_elss: boolean;
+  weight: number;
+  nav: number | null;
+  nav_date: string | null;
+  expense_ratio: number | null;
+  aum_cr: number | null;
+  returns: FundReturns;
+  risk: FundRisk;
+  badges: string[];
+  plain: string;
+}
+
+export interface FundBasket {
+  risk_level: RiskLevel;
+  risk_label: string;
+  goal: string;
+  monthly_amount: number;
+  horizon_years: number;
+  split: FundAllocation[];
+  schemes: FundRecommendation[];
+  expected_return_range: number[];
+  notes: string[];
+  generated_at: string;
+  data_as_of: string | null;
+  source: string;
+}
+
+export interface FundComparison {
+  codes: number[];
+  schemes: FundScheme[];
+  generated_at: string;
+}
+
+export interface FundDetail {
+  scheme: FundScheme;
+  history: { date: string; nav: number }[];
+  is_nfo: boolean;
+  generated_at: string;
+}
+
+export interface SipResult {
+  mode: string;
+  monthly_amount: number;
+  lumpsum_amount: number;
+  years: number;
+  step_up_pct: number;
+  assumed_return_pct: number;
+  invested: number;
+  future_value: number;
+  table: { year: number; invested: number; value: number }[];
+}
+
+export interface FundStatus {
+  enabled: boolean;
+  source: string;
+  data_as_of: string | null;
+  universe_size: number;
+  categories: { value: FundCategory; label: string }[];
+  note: string;
 }
