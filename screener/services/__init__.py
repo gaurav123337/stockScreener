@@ -14,6 +14,7 @@ from screener.services.recommendation_service import RecommendationService
 from screener.services.risk_profile_service import RiskProfileService
 from screener.services.plan_service import PlanService
 from screener.services.scan_service import ScanService
+from screener.services.subscription_service import SubscriptionService
 from screener.services.verification_service import VerificationService
 
 __all__ = [
@@ -32,5 +33,6 @@ __all__ = [
     "RiskProfileService",
     "PlanService",
     "ScanService",
+    "SubscriptionService",
     "VerificationService",
 ]

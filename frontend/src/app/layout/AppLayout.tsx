@@ -3,6 +3,7 @@ import { usePwaInstall } from "@/app/hooks/usePwaInstall";
 import { useTheme } from "@/app/hooks/useTheme";
 import { LoadingState } from "@/components/ui/Spinner";
 import { useAuth } from "@/features/auth/auth-context";
+import { useEntitlements } from "@/features/pro/hooks/useEntitlements";
 import { cn } from "@/lib/cn";
 import {
   BarChart3,
@@ -10,6 +11,7 @@ import {
   Briefcase,
   CircleHelp,
   Command,
+  Crown,
   Download,
   Landmark,
   LogIn,
@@ -46,11 +48,13 @@ const PRIMARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
   { to: "/indian-market", icon: Landmark, label: "Indian Market" },
   { to: "/mutual-funds", icon: PieChart, label: "Mutual Funds" },
   { to: "/track-record", icon: BarChart3, label: "Track Record" },
+  { to: "/pro", icon: Crown, label: "Pro" },
   { to: "/train", icon: BrainCircuit, label: "Train" },
   { to: "/brokers", icon: WalletCards, label: "Broker" },
 ];
 
 const SECONDARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
+  { to: "/pricing", icon: Crown, label: "Pricing" },
   { to: "/settings", icon: Settings, label: "Settings" },
   { to: "/guide", icon: CircleHelp, label: "Guide" },
   { to: "/feedback", icon: MessageSquareHeart, label: "Feedback" },
@@ -147,6 +151,7 @@ function SecondaryNavigation() {
 export function AppLayout() {
   const { canInstall, promptInstall } = usePwaInstall();
   const { user, isLoggedIn, logout } = useAuth();
+  const { isPro } = useEntitlements();
   const { theme, toggleTheme } = useTheme();
   const { fontSize, increaseFontSize, decreaseFontSize, canIncrease, canDecrease } = useFontSize();
   const navigate = useNavigate();
@@ -172,6 +177,12 @@ export function AppLayout() {
               >
                 <UserRound className="size-4 shrink-0" aria-hidden />
                 <span className="truncate">{user.display_name || user.username}</span>
+                {isPro && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-brand/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand">
+                    <Crown className="size-3" aria-hidden />
+                    Pro
+                  </span>
+                )}
               </span>
             )}
             {user?.role === "product_owner" && (

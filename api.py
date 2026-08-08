@@ -62,6 +62,7 @@ from screener.services import (
     RiskProfileService,
     PlanService,
     ScanService,
+    SubscriptionService,
     VerificationService,
     IndianMarketService,
 )
@@ -256,6 +257,13 @@ async def require_product_owner(user: UserProfile = Depends(require_auth)) -> Us
     if user.role != "product_owner":
         from screener.core.responses import ForbiddenError
         raise ForbiddenError("Product-owner access is required")
+    return user
+
+
+async def require_pro(user: UserProfile = Depends(require_auth)) -> UserProfile:
+    """Strict auth + active Pro tier. The gate lives server-side."""
+    from screener.services import SubscriptionService
+    get_service(SubscriptionService).require_pro(user)
     return user
 
 
@@ -1265,6 +1273,137 @@ def broker_holdings(user: UserProfile = Depends(get_current_user)):
         return broker.get_holdings()
     except Exception as e:
         raise AppException(ErrorCodes.BROKER_ERROR, f"Failed to fetch holdings: {e}", 500)
+
+
+# --------------------------------------------------------------------------- #
+# Freemium / Pro billing (Phase 4)
+# --------------------------------------------------------------------------- #
+
+def _billing() -> SubscriptionService:
+    return get_service(SubscriptionService)
+
+
+class CheckoutBody(BaseModel):
+    plan_id: str = Field(..., min_length=3, max_length=40)
+
+
+class SaveScreenBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    filter_expr: str = ""
+    sort_by: str = "score"
+    sort_dir: str = "desc"
+    limit: int = Field(50, ge=1, le=500)
+    alert_enabled: bool = False
+    alert_email: str | None = Field(None, max_length=254)
+
+
+class HoldingsBody(BaseModel):
+    holdings: list[dict[str, Any]] = Field(..., min_length=1, max_length=200)
+
+
+class StrategyBacktestBody(BaseModel):
+    strategy: str = Field(..., min_length=1, max_length=60)
+    symbols: list[str] | None = None
+
+
+class TierBody(BaseModel):
+    tier: str = Field(..., min_length=3, max_length=10)
+
+
+@app.get("/api/billing/plans")
+def billing_plans(user: UserProfile = Depends(get_current_user)):
+    """Public plan catalog (pricing + feature list)."""
+    return {"plans": _billing().plans()}
+
+
+@app.get("/api/billing/entitlements")
+def billing_entitlements(user: UserProfile = Depends(require_auth)):
+    """The requesting user's effective entitlements (server-authoritative)."""
+    return _billing().entitlements(user).model_dump(mode="json")
+
+
+@app.post("/api/billing/checkout")
+def billing_checkout(body: CheckoutBody, user: UserProfile = Depends(require_auth)):
+    """Open a checkout session for a plan (unpaid until confirmed)."""
+    return _billing().create_checkout(user, body.plan_id)
+
+
+@app.post("/api/billing/checkout/{session_id}/confirm")
+def billing_confirm(session_id: str, user: UserProfile = Depends(require_auth)):
+    """Settle a checkout session. Grants Pro when the gateway reports paid."""
+    return _billing().confirm_checkout(user, session_id)
+
+
+@app.get("/api/billing/subscription")
+def billing_subscription(user: UserProfile = Depends(require_auth)):
+    """Current subscription state + active flag."""
+    return _billing().current_subscription(user)
+
+
+@app.post("/api/billing/cancel")
+def billing_cancel(user: UserProfile = Depends(require_auth)):
+    """Cancel at renewal (Pro keeps working until renews_at)."""
+    return _billing().cancel_subscription(user)
+
+
+# Admin tier management (product-owner only)
+@app.post("/api/admin/users/{user_id}/tier")
+def admin_user_tier(user_id: str, body: TierBody, user: UserProfile = Depends(require_product_owner)):
+    """Set a user's tier (free/pro) — direct grant or immediate revoke."""
+    return _billing().admin_set_tier(user_id, body.tier)
+
+
+# --------------------------------------------------------------------------- #
+# Pro: saved screens + email alerts
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/pro/screens")
+def pro_list_screens(user: UserProfile = Depends(require_auth)):
+    """List my saved screens (Free tier can hold one, Pro unlimited)."""
+    return {"screens": _billing().list_screens(user)}
+
+
+@app.post("/api/pro/screens")
+def pro_save_screen(body: SaveScreenBody, user: UserProfile = Depends(require_auth)):
+    """Save a screen; alerts require Pro."""
+    return _billing().save_screen(
+        user,
+        name=body.name,
+        filter_expr=body.filter_expr,
+        sort_by=body.sort_by,
+        sort_dir=body.sort_dir,
+        limit=body.limit,
+        alert_enabled=body.alert_enabled,
+        alert_email=body.alert_email,
+    )
+
+
+@app.delete("/api/pro/screens/{screen_id}")
+def pro_delete_screen(screen_id: str, user: UserProfile = Depends(require_auth)):
+    """Delete one of my saved screens."""
+    return _billing().delete_screen(user, screen_id)
+
+
+@app.post("/api/pro/screens/{screen_id}/evaluate")
+def pro_evaluate_screen(screen_id: str, user: UserProfile = Depends(require_pro)):
+    """Run a saved screen against the live universe and dispatch an alert."""
+    return _billing().evaluate_screen(user, screen_id)
+
+
+# --------------------------------------------------------------------------- #
+# Pro: portfolio analytics + per-strategy deep backtest
+# --------------------------------------------------------------------------- #
+
+@app.post("/api/pro/portfolio/analytics")
+def pro_portfolio_analytics(body: HoldingsBody, user: UserProfile = Depends(require_pro)):
+    """Aggregate analytics for a user-declared holding list."""
+    return _billing().portfolio_analytics(user, body.holdings)
+
+
+@app.post("/api/pro/strategy/backtest")
+def pro_strategy_backtest(body: StrategyBacktestBody, user: UserProfile = Depends(require_pro)):
+    """Focused per-strategy walk-forward replay on requested symbols."""
+    return _billing().strategy_backtest(user, body.strategy, body.symbols)
 
 
 # --------------------------------------------------------------------------- #

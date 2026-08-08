@@ -132,6 +132,7 @@ class UserProfile(BaseModel):
     email_verified_at: datetime | None = None
     role: str = "user"
     status: str = "active"
+    tier: str = "free"
     created_at: datetime
     last_login_at: datetime | None = None
     preferences: dict[str, Any] = Field(default_factory=dict)
@@ -157,6 +158,7 @@ class UserRecord(BaseModel):
     email_verified_at: datetime | None = None
     role: str = "user"
     status: str = "active"
+    tier: str = "free"
     last_login_at: datetime | None = None
     token_version: int = 0
     preferences: dict[str, Any] = Field(default_factory=dict)
@@ -215,6 +217,7 @@ class UserStore:
                 "email_verified_at": "TEXT",
                 "role": "TEXT NOT NULL DEFAULT 'user'",
                 "status": "TEXT NOT NULL DEFAULT 'active'",
+                "tier": "TEXT NOT NULL DEFAULT 'free'",
                 "last_login_at": "TEXT",
                 "token_version": "INTEGER NOT NULL DEFAULT 0",
             }
@@ -330,7 +333,7 @@ class UserStore:
         return [self._row_to_record(r) for r in rows]
 
     def update_account(self, user_id: str, **changes: Any) -> UserRecord | None:
-        allowed = {"email", "normalized_email", "email_verified_at", "role", "status", "last_login_at", "token_version", "password_hash", "password_salt"}
+        allowed = {"email", "normalized_email", "email_verified_at", "role", "status", "tier", "last_login_at", "token_version", "password_hash", "password_salt"}
         values = {key: value for key, value in changes.items() if key in allowed}
         if not values:
             return self.get_by_id(user_id)
@@ -408,6 +411,7 @@ class UserStore:
             email_verified_at=datetime.fromisoformat(row["email_verified_at"]) if "email_verified_at" in row.keys() and row["email_verified_at"] else None,
             role=row["role"] if "role" in row.keys() else "user",
             status=row["status"] if "status" in row.keys() else "active",
+            tier=row["tier"] if "tier" in row.keys() else "free",
             last_login_at=datetime.fromisoformat(row["last_login_at"]) if "last_login_at" in row.keys() and row["last_login_at"] else None,
             token_version=int(row["token_version"]) if "token_version" in row.keys() else 0,
             preferences=json.loads(row["preferences"]) if row["preferences"] else {},

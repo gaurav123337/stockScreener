@@ -31,6 +31,11 @@ const UsersPage = lazy(() => import("@/features/control-center/UsersPage"));
 const FeedbackOpsPage = lazy(() => import("@/features/control-center/FeedbackOpsPage"));
 const ConfigPage = lazy(() => import("@/features/control-center/ConfigPage"));
 const AuditPage = lazy(() => import("@/features/control-center/AuditPage"));
+const PricingPage = lazy(() => import("@/features/pricing/PricingPage"));
+const ProPage = lazy(() => import("@/features/pro/ProPage"));
+const ProScreensPage = lazy(() => import("@/features/pro/ProScreensPage"));
+const ProPortfolioPage = lazy(() => import("@/features/pro/ProPortfolioPage"));
+const ProBacktestPage = lazy(() => import("@/features/pro/ProBacktestPage"));
 const IndexRedirect = lazy(() => import("./IndexRedirect"));
 
 export const router = createHashRouter([
@@ -62,6 +67,11 @@ export const router = createHashRouter([
       { path: "settings", element: <SettingsPage /> },
       { path: "guide", element: <GuidePage /> },
       { path: "feedback", element: <FeedbackPage /> },
+      { path: "pricing", element: <PricingPage /> },
+      { path: "pro", element: <ProPage /> },
+      { path: "pro/screens", element: <ProScreensPage /> },
+      { path: "pro/portfolio", element: <ProPortfolioPage /> },
+      { path: "pro/backtest", element: <ProBacktestPage /> },
       { path: "auth/login", element: <LoginPage /> },
       { path: "auth/register", element: <RegisterPage /> },
       { path: "auth/forgot-password", element: <ForgotPasswordPage /> },

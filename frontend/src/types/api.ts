@@ -14,6 +14,7 @@ export interface UserProfile {
   display_name: string | null;
   role: "user" | "product_owner";
   status: "active" | "suspended";
+  tier?: "free" | "pro";
   email_verified_at: string | null;
   created_at: string;
   last_login_at: string | null;
@@ -601,4 +602,141 @@ export interface FundStatus {
   universe_size: number;
   categories: { value: FundCategory; label: string }[];
   note: string;
+}
+
+/* -------------------------------- Pro / Billing ----------------------------- */
+
+export type PlanInterval = "month" | "year";
+export type SubscriptionStatus =
+  | "none"
+  | "trial"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "expired";
+
+export interface BillingPlan {
+  id: "pro_monthly" | "pro_yearly";
+  name: string;
+  interval: PlanInterval;
+  price_inr: number;
+  price_usd: number;
+  currency: string;
+  description: string;
+  features: string[];
+  highlighted?: boolean;
+  trial_days?: number;
+}
+
+export interface CheckoutSession {
+  session_id: string;
+  plan_id: string;
+  status: string;
+  gateway: string;
+  amount_inr: number | null;
+  confirm_url: string | null;
+  expires_at: string | null;
+}
+
+export interface SubscriptionInfo {
+  tier: "free" | "pro";
+  plan_id: string | null;
+  status: SubscriptionStatus;
+  started_at: string | null;
+  renews_at: string | null;
+  canceled_at: string | null;
+  is_active: boolean;
+  gateway: string | null;
+}
+
+export interface Entitlements {
+  tier: "free" | "pro";
+  is_pro: boolean;
+  plan_id: string | null;
+  status: SubscriptionStatus;
+  renews_at: string | null;
+  features: Record<string, boolean>;
+  limits: Record<string, number>;
+}
+
+export interface SavedScreen {
+  screen_id: string;
+  user_id: string;
+  name: string;
+  filter_expr: string;
+  sort_by: string;
+  sort_dir: string;
+  limit: number;
+  created_at: string;
+  updated_at: string;
+  alert_enabled: boolean;
+  alert_email: string | null;
+  last_alert_at: string | null;
+  last_match_count: number;
+}
+
+export interface AlertEvaluation {
+  screen: SavedScreen;
+  matched: Record<string, unknown>[];
+  new_matches: number;
+  email_sent: boolean;
+  evaluated_at: string;
+}
+
+export interface PortfolioHolding {
+  symbol: string;
+  name: string | null;
+  sector: string;
+  price: number;
+  score: number | null;
+  action: Action | null;
+  risk_badge: string | null;
+  pe: number | null;
+  roe: number | null;
+  quantity: number;
+  value: number;
+  unrealized_pnl: number;
+  weight: number;
+}
+
+export interface PortfolioAnalytics {
+  total_value: number;
+  total_cost: number;
+  total_unrealized_pnl: number;
+  unrealized_pnl_pct: number | null;
+  weighted_dividend_yield: number;
+  avg_signal_score: number | null;
+  holdings_count: number;
+  concentration_herfindahl: number;
+  sector_exposure: { sector: string; value: number; weight: number }[];
+  holdings: PortfolioHolding[];
+}
+
+export interface StrategyBacktestHorizon {
+  horizon_days: number;
+  n: number;
+  hit_rate: number | null;
+  avg_return: number | null;
+  avg_win: number | null;
+  avg_loss: number | null;
+  max_drawdown: number | null;
+  benchmark_avg_return: number | null;
+  vs_benchmark: number | null;
+  by_action: Record<Action, { n: number; correct: number }> | null;
+}
+
+export interface StrategyBacktest {
+  strategy: string;
+  generated_at: string;
+  window_start: string;
+  window_end: string;
+  universe: string[];
+  universe_size: number;
+  signals: number;
+  per_symbol: Record<
+    string,
+    { signals: number; action_split: Record<Action, number> }
+  >;
+  horizons: StrategyBacktestHorizon[];
+  methodology: string[];
 }

@@ -3,15 +3,20 @@ import type {
   AdminFeedbackDetail,
   AdminOverview,
   AdminUser,
+  AlertEvaluation,
   AuditEvent,
   AuthToken,
+  BacktestReport,
+  BillingPlan,
   BrokerConnectRequest,
   BrokerInstructionsResponse,
   BrokerStatusResponse,
+  CheckoutSession,
   ComplianceResponse,
   ConfigDiff,
   ConfigPublication,
   ConfigRegistryItem,
+  Entitlements,
   FeedbackReceipt,
   FeedbackRequest,
   FiltersResponse,
@@ -33,9 +38,11 @@ import type {
   KnowledgeResponse,
   LearnResult,
   Paginated,
+  PortfolioAnalytics,
   RiskProfile,
   RiskProfileResponse,
   RiskQuestion,
+  SavedScreen,
   ScanRequest,
   ScanResponse,
   ScanRow,
@@ -43,9 +50,10 @@ import type {
   Settings,
   SettingsPatch,
   SipResult,
+  StrategyBacktest,
+  SubscriptionInfo,
   UserProfile,
   VerifyResponse,
-  BacktestReport,
   WatchlistResponse,
 } from "@/types/api";
 import { http } from "./client";
@@ -250,4 +258,40 @@ export const api = {
     assumed_return_pct?: number;
     step_up_pct?: number;
   }) => http.post<SipResult>("/api/mutual-funds/sip", body),
+
+  /* Pro / billing (Phase 4) */
+  billingPlans: () => http.get<{ plans: BillingPlan[] }>("/api/billing/plans"),
+  billingEntitlements: () => http.get<Entitlements>("/api/billing/entitlements"),
+  billingSubscription: () => http.get<SubscriptionInfo>("/api/billing/subscription"),
+  createCheckout: (planId: string) =>
+    http.post<CheckoutSession>("/api/billing/checkout", { plan_id: planId }),
+  confirmCheckout: (sessionId: string) =>
+    http.post<{ status: string; tier: string; plan_id: string; renews_at: string; message: string }>(
+      `/api/billing/checkout/${encodeURIComponent(sessionId)}/confirm`,
+    ),
+  cancelSubscription: () => http.post<SubscriptionInfo>("/api/billing/cancel"),
+
+  /* Pro: saved screens + alerts */
+  listSavedScreens: () => http.get<{ screens: SavedScreen[] }>("/api/pro/screens"),
+  saveScreen: (body: {
+    name: string;
+    filter_expr?: string;
+    sort_by?: string;
+    sort_dir?: string;
+    limit?: number;
+    alert_enabled?: boolean;
+    alert_email?: string | null;
+  }) => http.post<SavedScreen>("/api/pro/screens", body),
+  deleteScreen: (screenId: string) =>
+    http.delete<{ deleted: boolean; screen_id: string }>(
+      `/api/pro/screens/${encodeURIComponent(screenId)}`,
+    ),
+  evaluateScreen: (screenId: string) =>
+    http.post<AlertEvaluation>(`/api/pro/screens/${encodeURIComponent(screenId)}/evaluate`),
+
+  /* Pro: portfolio analytics + strategy backtest */
+  portfolioAnalytics: (holdings: Record<string, unknown>[]) =>
+    http.post<PortfolioAnalytics>("/api/pro/portfolio/analytics", { holdings }),
+  strategyBacktest: (body: { strategy: string; symbols?: string[] }) =>
+    http.post<StrategyBacktest>("/api/pro/strategy/backtest", body),
 };

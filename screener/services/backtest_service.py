@@ -65,6 +65,111 @@ class BacktestService:
         self._save_cache(report)
         return records
 
+    def run_symbols(self, strategy: str = "default", symbols: list[str] | None = None) -> dict:
+        """Focused per-strategy replay over an explicit symbol list (Pro research).
+
+        Reuses the same no-lookahead walk-forward machinery as the published
+        track record, but restricted to the requested symbols so a Pro user can
+        sanity-check a strategy on names they care about before committing
+        capital. Returns per-horizon hit-rates and benchmark comparison.
+        """
+        symbols = [s for s in (symbols or []) if s]
+        if not symbols:
+            return {"error": "no symbols provided", "strategy": strategy}
+
+        today = date.today()
+        start = datetime.strptime(config.backtest.start_date, "%Y-%m-%d").date()
+        horizons = list(config.verification.horizons)
+        max_h = max(horizons)
+        engine = ScoringEngine(use_registry=False, scoring_config=config.scoring)
+        eval_dates = self._eval_dates(start, today, max_h)
+        benchmark = load_benchmark(self._data, config.verification.benchmark_symbol)
+
+        samples: dict[int, list[tuple[PredictionRecord, float]]] = {h: [] for h in horizons}
+        signals = 0
+        per_symbol: dict[str, dict] = {}
+        data = self._load_symbols(symbols)
+        for symbol, df in data.items():
+            if df is None or df.empty:
+                continue
+            info = self._safe_info(symbol)
+            last_idx = pd.to_datetime(df.index)
+            local_signals = 0
+            action_split = {"BUY": 0, "SELL": 0, "HOLD": 0}
+            for t in eval_dates:
+                pos = last_idx.searchsorted(pd.Timestamp(t), side="right") - 1
+                if pos < 1:
+                    continue
+                on = last_idx[pos]
+                if on < pd.Timestamp(start):
+                    continue
+                last, prev = df.iloc[pos], df.iloc[pos - 1]
+                try:
+                    score, _ = engine.total_score(last, prev, info)
+                    confidence = engine.confidence(last, prev, info, apply_age_penalty=False)
+                except Exception:  # noqa: BLE001 — skip glitchy rows
+                    continue
+                score = float(max(-100, min(100, score)))
+                action = "BUY" if score >= config.scoring.buy_threshold else (
+                    "SELL" if score <= config.scoring.sell_threshold else "HOLD"
+                )
+                rec = PredictionRecord(
+                    ts=pd.Timestamp(on).to_pydatetime().replace(tzinfo=None),
+                    symbol=symbol, action=action, price_at_call=float(last["Close"]),
+                    horizon_days=max_h, score=score, confidence=confidence,
+                )
+                signals += 1
+                local_signals += 1
+                action_split[action] += 1
+                for h in horizons:
+                    end = on + timedelta(days=h)
+                    if end.date() > today:
+                        continue
+                    price = asof_close(df, end.date())
+                    if price is None:
+                        continue
+                    samples[h].append((rec, price))
+            per_symbol[symbol] = {
+                "signals": local_signals,
+                "action_split": action_split,
+            }
+
+        stats = [horizon_stats(h, samples[h], benchmark) for h in horizons]
+        return {
+            "strategy": strategy,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "window_start": start.isoformat(),
+            "window_end": today.isoformat(),
+            "universe": symbols,
+            "universe_size": len(symbols),
+            "signals": signals,
+            "per_symbol": per_symbol,
+            "horizons": [s.model_dump(mode="json") for s in stats],
+            "methodology": [
+                "Focused per-strategy replay using the exact production signal engine",
+                "Indicators at time t use only data up to t (no lookahead)",
+                f"Benchmark: {config.verification.benchmark_symbol} buy-and-hold",
+                "No fees, slippage, or taxes modelled. Past performance is not a guarantee of future results.",
+            ],
+        }
+
+    def _load_symbols(self, symbols: list[str]) -> dict[str, pd.DataFrame | None]:
+        out: dict[str, pd.DataFrame | None] = {}
+        for symbol in symbols:
+            try:
+                raw = self._data.fetch_history(symbol, period="5y")
+            except Exception:  # noqa: BLE001
+                raw = None
+            if raw is None or raw.empty:
+                out[symbol] = None
+                continue
+            raw = raw.dropna(subset=["Close"])
+            if len(raw) < config.data.min_history_rows:
+                out[symbol] = None
+                continue
+            out[symbol] = add_all(raw)
+        return out
+
     # ------------------------------------------------------------------- replay
 
     def _replay(self) -> tuple[BacktestReport, list[PredictionRecord]]:

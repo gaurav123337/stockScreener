@@ -33,6 +33,7 @@ from screener.services import (
     RiskProfileService,
     PlanService,
     ScanService,
+    SubscriptionService,
     VerificationService,
     IndianMarketService,
     MutualFundService,
@@ -72,6 +73,7 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(RecommendationService, RecommendationService)
     container.register(RiskProfileService, RiskProfileService)
     container.register(PlanService, PlanService)
+    container.register(SubscriptionService, SubscriptionService)
     container.register(IndianMarketService, factory=lambda: IndianMarketService(get_service(IndianMarketGateway)))
     container.register(
         MutualFundService,

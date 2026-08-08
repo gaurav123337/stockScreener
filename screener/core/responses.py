@@ -84,6 +84,12 @@ class ErrorCodes:
     PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
     REQUEST_TIMEOUT = "REQUEST_TIMEOUT"
 
+    # Billing / entitlements (Phase 4)
+    PRO_REQUIRED = "PRO_REQUIRED"
+    PAYMENT_REQUIRED = "PAYMENT_REQUIRED"
+    INVALID_PLAN = "INVALID_PLAN"
+    CHECKOUT_NOT_FOUND = "CHECKOUT_NOT_FOUND"
+
 
 # --------------------------------------------------------------------------- #
 # Exception → JSON mapping
@@ -122,6 +128,26 @@ class AuthError(AppException):
 class ForbiddenError(AppException):
     def __init__(self, message: str = "Access forbidden"):
         super().__init__(ErrorCodes.AUTH_FORBIDDEN, message, 403)
+
+
+class ProRequiredError(AppException):
+    """A feature is only available on the Pro plan (paywall)."""
+
+    def __init__(self, feature: str = "", message: str = ""):
+        label = f" for '{feature}'" if feature else ""
+        super().__init__(
+            ErrorCodes.PRO_REQUIRED,
+            message or f"Upgrade to Pro to unlock this feature{label}.",
+            402,
+            {"feature": feature} if feature else None,
+        )
+
+
+class PaymentError(AppException):
+    """A billing / payment operation failed."""
+
+    def __init__(self, code: str = ErrorCodes.PAYMENT_REQUIRED, message: str = "Payment required"):
+        super().__init__(code, message, 402)
 
 
 class ValidationError(AppException):

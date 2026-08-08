@@ -153,6 +153,24 @@ class MutualFundConfig(BaseSettings):
     risk_free_rate: float = Field(default=0.065, ge=0, le=0.20)
 
 
+class BillingConfig(BaseSettings):
+    """Freemium / Pro subscription configuration (Phase 4)."""
+    model_config = SettingsConfigDict(env_prefix="SCREENER_BILLING_")
+
+    # The active payment gateway: "sandbox" (default) or a production name.
+    gateway: str = "sandbox"
+    # Free-tier limits (churn-safe: generous but gated so Pro has a reason).
+    free_saved_screens: int = 1
+    pro_saved_screens: int = 50
+    # Trial length in days for the yearly plan (0 = no trial).
+    trial_days: int = 7
+    # Annualized Pro pricing anchored to screener.in Premium / Tickertape Pro.
+    pro_monthly_inr: float = 199.0
+    pro_monthly_usd: float = 3.0
+    pro_yearly_inr: float = 1999.0
+    pro_yearly_usd: float = 24.0
+
+
 class ComplianceConfig(BaseSettings):
     """Trust / compliance framing surfaced alongside every recommendation.
 
@@ -197,6 +215,7 @@ class AppConfig(BaseSettings):
     verification: VerificationConfig = Field(default_factory=VerificationConfig)
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
+    billing: BillingConfig = Field(default_factory=BillingConfig)
     indian_api: IndianApiConfig = Field(default_factory=IndianApiConfig)
     mutual_fund: MutualFundConfig = Field(default_factory=MutualFundConfig)
     market_data_provider: Literal["yahoo", "indian_api", "hybrid"] = "yahoo"
