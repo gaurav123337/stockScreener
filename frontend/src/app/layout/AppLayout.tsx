@@ -7,9 +7,12 @@ import { useEntitlements } from "@/features/pro/hooks/useEntitlements";
 import { cn } from "@/lib/cn";
 import {
   BarChart3,
+  BellRing,
+  BookOpenText,
   BrainCircuit,
   Briefcase,
   CircleHelp,
+  ClipboardCheck,
   Command,
   Crown,
   Download,
@@ -48,6 +51,7 @@ const PRIMARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
   { to: "/indian-market", icon: Landmark, label: "Indian Market" },
   { to: "/mutual-funds", icon: PieChart, label: "Mutual Funds" },
   { to: "/track-record", icon: BarChart3, label: "Track Record" },
+  { to: "/alerts", icon: BellRing, label: "Alerts" },
   { to: "/pro", icon: Crown, label: "Pro" },
   { to: "/train", icon: BrainCircuit, label: "Train" },
   { to: "/brokers", icon: WalletCards, label: "Broker" },
@@ -55,6 +59,10 @@ const PRIMARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
 
 const SECONDARY_DESTINATIONS: ReadonlyArray<NavigationItem> = [
   { to: "/pricing", icon: Crown, label: "Pricing" },
+  { to: "/learn", icon: BookOpenText, label: "Learn" },
+  { to: "/proof", icon: BarChart3, label: "Proof & stories" },
+  { to: "/check", icon: ClipboardCheck, label: "Check before buy" },
+  { to: "/feedback-loop", icon: BrainCircuit, label: "Model feedback" },
   { to: "/settings", icon: Settings, label: "Settings" },
   { to: "/guide", icon: CircleHelp, label: "Guide" },
   { to: "/feedback", icon: MessageSquareHeart, label: "Feedback" },

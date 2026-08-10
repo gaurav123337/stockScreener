@@ -171,6 +171,23 @@ class BillingConfig(BaseSettings):
     pro_yearly_usd: float = 24.0
 
 
+class PushConfig(BaseSettings):
+    """PWA web-push (VAPID) configuration (Phase 5).
+
+    In the preview environment no real push provider is contacted — alert and
+    notification delivery is best-effort through the outbox. These keys are
+    used by a real web-push adapter when the app runs with a provider.
+    """
+    model_config = SettingsConfigDict(env_prefix="SCREENER_PUSH_")
+
+    # Placeholder VAPID keys (dev). Replace with real generated keys for prod.
+    vapid_public_key: str = "BDHm0Xk9A1VHm0Xk9A1VHm0Xk9A1VHm0Xk9A1VHm0Xk9A1V"
+    vapid_private_key: str = "dev-private-key-replace-me"
+    vapid_subject: str = "mailto:support@stockscreener.in"
+    # A real provider (e.g. "webpush") can be configured here later.
+    provider: str = "outbox"
+
+
 class ComplianceConfig(BaseSettings):
     """Trust / compliance framing surfaced alongside every recommendation.
 
@@ -216,6 +233,7 @@ class AppConfig(BaseSettings):
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
     billing: BillingConfig = Field(default_factory=BillingConfig)
+    push: PushConfig = Field(default_factory=PushConfig)
     indian_api: IndianApiConfig = Field(default_factory=IndianApiConfig)
     mutual_fund: MutualFundConfig = Field(default_factory=MutualFundConfig)
     market_data_provider: Literal["yahoo", "indian_api", "hybrid"] = "yahoo"
@@ -285,6 +303,14 @@ class AppConfig(BaseSettings):
     @property
     def backtest_report_file(self) -> Path:
         return self.data_dir / "backtest_report.json"
+
+    @property
+    def scorecard_cache_file(self) -> Path:
+        return self.data_dir / "scorecard.json"
+
+    @property
+    def changelog_file(self) -> Path:
+        return self.data_dir / "changelog.json"
 
     # ---- Phase-3 mutual-fund cache paths ----
     @property

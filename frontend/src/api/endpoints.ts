@@ -4,22 +4,32 @@ import type {
   AdminOverview,
   AdminUser,
   AlertEvaluation,
+  AlertRule,
+  AlertRuleType,
+  Article,
+  ArticleSummary,
   AuditEvent,
   AuthToken,
   BacktestReport,
   BillingPlan,
   BrokerConnectRequest,
   BrokerInstructionsResponse,
+  BrokerLink,
   BrokerStatusResponse,
+  ChangelogEntry,
+  CheckBeforeBuy,
   CheckoutSession,
   ComplianceResponse,
   ConfigDiff,
   ConfigPublication,
   ConfigRegistryItem,
   Entitlements,
+  FeedbackOutcomes,
   FeedbackReceipt,
   FeedbackRequest,
+  FeedbackSuggestions,
   FiltersResponse,
+  FiredAlert,
   FundBasket,
   FundCategory,
   FundComparison,
@@ -37,6 +47,7 @@ import type {
   InvestmentPlan,
   KnowledgeResponse,
   LearnResult,
+  MonthlyScorecard,
   Paginated,
   PortfolioAnalytics,
   RiskProfile,
@@ -52,6 +63,7 @@ import type {
   SipResult,
   StrategyBacktest,
   SubscriptionInfo,
+  SuccessStory,
   UserProfile,
   VerifyResponse,
   WatchlistResponse,
@@ -294,4 +306,71 @@ export const api = {
     http.post<PortfolioAnalytics>("/api/pro/portfolio/analytics", { holdings }),
   strategyBacktest: (body: { strategy: string; symbols?: string[] }) =>
     http.post<StrategyBacktest>("/api/pro/strategy/backtest", body),
+
+  /* Learn moat (Phase 5) */
+  learnList: (q = "", category?: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (category) params.set("category", category);
+    const query = params.toString();
+    return http.get<{ articles: ArticleSummary[]; count: number }>(
+      `/api/learn${query ? `?${query}` : ""}`,
+    );
+  },
+  learnDetail: (slug: string) => http.get<Article>(`/api/learn/${encodeURIComponent(slug)}`),
+
+  /* Proof layer (Phase 5) */
+  monthlyScorecard: () => http.get<MonthlyScorecard>("/api/scorecard"),
+  successStories: () => http.get<{ stories: SuccessStory[] }>("/api/stories"),
+
+  /* Alerts (Phase 5) */
+  listAlerts: () => http.get<{ rules: AlertRule[] }>("/api/alerts"),
+  createAlert: (body: {
+    rule_type: AlertRuleType;
+    name?: string;
+    symbol?: string;
+    scheme_code?: string;
+    direction?: "above" | "below";
+    trigger_value: number;
+    screen_id?: string;
+    enabled?: boolean;
+  }) => http.post<AlertRule>("/api/alerts", body),
+  deleteAlert: (alertId: string) =>
+    http.delete<{ deleted: boolean }>(`/api/alerts/${encodeURIComponent(alertId)}`),
+  resetAlert: (alertId: string) =>
+    http.post<{ reset: boolean }>(`/api/alerts/${encodeURIComponent(alertId)}/reset`),
+  evaluateAlerts: (symbols: string[] = []) =>
+    http.post<{ fired: FiredAlert[] }>("/api/alerts/evaluate", { symbols }),
+
+  /* PWA push (Phase 5) */
+  pushPublicKey: () => http.get<{ public_key: string }>("/api/push/public-key"),
+  pushSubscribe: (body: {
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    user_agent: string;
+  }) => http.post<{ subscribed: boolean }>("/api/push/subscribe", body),
+  pushUnsubscribe: (endpoint: string) =>
+    http.delete<{ unsubscribed: boolean }>(`/api/push/subscribe?endpoint=${encodeURIComponent(endpoint)}`),
+
+  /* Check-before-buy (Phase 5) */
+  checkBrokers: () => http.get<{ brokers: BrokerLink[] }>("/api/check/brokers"),
+  checkDeepLink: (brokerId: string, symbol: string) =>
+    http.get<{ broker: string; symbol: string; web: string; app: string }>(
+      `/api/check/deep-link/${encodeURIComponent(brokerId)}?symbol=${encodeURIComponent(symbol)}`,
+    ),
+  checkBeforeBuy: (symbol: string) =>
+    http.get<CheckBeforeBuy>(`/api/check/${encodeURIComponent(symbol)}`),
+
+  /* Feedback loop (Phase 5) */
+  feedbackOutcomes: () => http.get<FeedbackOutcomes>("/api/feedback-loop/outcomes"),
+  feedbackSuggestions: () => http.get<FeedbackSuggestions>("/api/feedback-loop/suggestions"),
+  feedbackChangelog: () => http.get<{ entries: ChangelogEntry[] }>("/api/feedback-loop/changelog"),
+  feedbackPublish: (body: {
+    version: string;
+    date?: string;
+    title: string;
+    summary: string;
+    weight_changes?: Record<string, Record<string, unknown>>;
+  }) => http.post<ChangelogEntry>("/api/feedback-loop/publish", body),
 };

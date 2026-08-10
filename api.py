@@ -19,10 +19,10 @@ from pathlib import Path
 from threading import Thread
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile, File
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request, UploadFile, File
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -46,13 +46,18 @@ from screener.core.responses import (
     ValidationError,
 )
 from screener.core.mf_models import FundScreenerRequest
+from screener.core.subscription_models import subscription_store
 from screener.core.user_models import UserCreate, UserLogin, UserProfile
 from screener.services import (
     AnalysisService,
+    AlertService,
     AuthService,
     BacktestService,
     BrokerService,
+    CheckBeforeBuyService,
+    ContentService,
     ControlCenterService,
+    FeedbackLoopService,
     FeedbackService,
     FilterService,
     KnowledgeService,
@@ -62,6 +67,7 @@ from screener.services import (
     RiskProfileService,
     PlanService,
     ScanService,
+    ScorecardService,
     SubscriptionService,
     VerificationService,
     IndianMarketService,
@@ -1012,6 +1018,138 @@ def backtest_run(user: UserProfile = Depends(require_product_owner)):
 
 
 # --------------------------------------------------------------------------- #
+# Learn moat — beginner explainers served as JSON (and as SEO pages below)
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/learn")
+def learn_list(q: str = "", category: str | None = None):
+    """Catalogue of beginner explainer articles (the SEO/content moat)."""
+    articles = get_service(ContentService).search(q) if q else get_service(ContentService).list_articles()
+    if category:
+        articles = [a for a in articles if a.get("category") == category]
+    return {"articles": articles, "count": len(articles)}
+
+
+@app.get("/api/learn/{slug}")
+def learn_detail(slug: str):
+    """Full article body for the in-app reader."""
+    article = get_service(ContentService).get_article(slug)
+    return article.model_dump(mode="json")
+
+
+def _render_article_page(slug: str) -> str | None:
+    """Server-render a full HTML page for SEO crawlers and link-sharers."""
+    from html import escape
+
+    from screener.core.content_models import Article
+
+    try:
+        article: Article = get_service(ContentService).get_article(slug)
+    except Exception:
+        return None
+    meta_desc = escape(article.seo_meta.get("description", article.excerpt(155)))
+    title = escape(article.title)
+    sections_html = []
+    for section in article.sections:
+        paras = "".join(f"<p>{escape(p)}</p>" for p in section.body.split("\n\n") if p.strip())
+        bullets = ""
+        if section.bullets:
+            items = "".join(f"<li>{escape(b)}</li>" for b in section.bullets)
+            bullets = f"<ul>{items}</ul>"
+        sections_html.append(
+            f"<section><h2>{escape(section.heading)}</h2>{paras}{bullets}</section>"
+        )
+    related_links = "".join(
+        f'<a href="/learn/{escape(rel)}">{escape(rel)}</a>' for rel in article.related_slugs
+    )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title} — stockScreener Learn</title>
+<meta name="description" content="{meta_desc}">
+</head>
+<body>
+<header><a href="/learn">&larr; Learn hub</a></header>
+<main>
+<h1>{title}</h1>
+<p class="tagline">{escape(article.tagline)}</p>
+<p class="meta">{article.reading_minutes} min read · {escape(article.category)}</p>
+{"".join(sections_html)}
+<section class="related"><h2>Keep learning</h2>{related_links}</section>
+</main>
+<footer>Educational content. Not investment advice.</footer>
+</body>
+</html>"""
+
+
+@app.get("/learn", response_class=HTMLResponse)
+def learn_hub():
+    """Server-rendered list of all explainer articles (SEO landing page)."""
+    from html import escape
+
+    cards = []
+    for a in get_service(ContentService).list_articles():
+        desc = escape(a["excerpt"])
+        cards.append(
+            f'<article><h2><a href="/learn/{a["slug"]}">{escape(a["title"])}</a></h2>'
+            f'<p>{desc}</p><p class="meta">{a["reading_minutes"]} min · {escape(a["category"])}</p></article>'
+        )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn — stockScreener</title>
+<meta name="description" content="Beginner guides to Indian stock-market concepts: P/E ratio, index funds vs ETFs, ELSS tax saving, the Signal Score and drawdowns.">
+</head>
+<body>
+<header><h1>Learn</h1></header>
+<main>{"".join(cards)}</main>
+<footer>Educational content. Not investment advice.</footer>
+</body>
+</html>"""
+
+
+@app.get("/learn/{slug}", response_class=HTMLResponse)
+def learn_page(slug: str):
+    """Server-rendered article page for SEO crawlers and link-sharers."""
+    page = _render_article_page(slug)
+    if page is None:
+        raise NotFoundError("Article not found")
+    return page
+
+
+# --------------------------------------------------------------------------- #
+# Proof layer — monthly scorecard + illustrative success stories
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/scorecard")
+def scorecard(user: UserProfile = Depends(get_current_user)):
+    """Published monthly track record (backtest + live verification log)."""
+    try:
+        return get_service(ScorecardService).monthly_scorecard()
+    except Exception as e:
+        raise DataSourceError(f"Scorecard unavailable: {e}")
+
+
+@app.post("/api/scorecard/refresh")
+def scorecard_refresh(user: UserProfile = Depends(require_product_owner)):
+    """Force regeneration of the monthly scorecard (slow, admin-only)."""
+    try:
+        return get_service(ScorecardService).refresh()
+    except Exception as e:
+        raise DataSourceError(f"Scorecard refresh failed: {e}")
+
+
+@app.get("/api/stories")
+def success_stories(user: UserProfile = Depends(get_current_user)):
+    """Illustrative educational walkthroughs — explicitly not real users."""
+    return {"stories": get_service(ScorecardService).success_stories()}
+
+
+# --------------------------------------------------------------------------- #
 # Indian market research APIs (optional, server-side provider)
 # --------------------------------------------------------------------------- #
 
@@ -1404,6 +1542,188 @@ def pro_portfolio_analytics(body: HoldingsBody, user: UserProfile = Depends(requ
 def pro_strategy_backtest(body: StrategyBacktestBody, user: UserProfile = Depends(require_pro)):
     """Focused per-strategy walk-forward replay on requested symbols."""
     return _billing().strategy_backtest(user, body.strategy, body.symbols)
+
+
+# --------------------------------------------------------------------------- #
+# Alerts (Phase 5) — price, screen-hit and MF-NAV threshold rules
+# --------------------------------------------------------------------------- #
+
+class AlertRuleBody(BaseModel):
+    rule_type: str = Field(..., min_length=3, max_length=20)
+    name: str | None = Field(None, max_length=120)
+    symbol: str | None = Field(None, max_length=20)
+    scheme_code: str | None = Field(None, max_length=20)
+    direction: str = "above"
+    trigger_value: float = Field(..., ge=0)
+    screen_id: str | None = Field(None, max_length=64)
+    enabled: bool = True
+
+
+def _alerts() -> AlertService:
+    return get_service(AlertService)
+
+
+@app.get("/api/alerts")
+def alerts_list(user: UserProfile = Depends(require_pro)):
+    """List my alert rules (Pro)."""
+    return {"rules": [r.model_dump(mode="json") for r in _alerts().list_rules(user)]}
+
+
+@app.post("/api/alerts")
+def alerts_create(body: AlertRuleBody, user: UserProfile = Depends(require_pro)):
+    """Create an alert rule (price, screen_hit or mf_nav)."""
+    rule = _alerts().create_rule(user, body.model_dump())
+    return rule.model_dump(mode="json")
+
+
+@app.delete("/api/alerts/{alert_id}")
+def alerts_delete(alert_id: str, user: UserProfile = Depends(require_pro)):
+    """Delete one of my alert rules."""
+    deleted = _alerts().delete_rule(user, alert_id)
+    if not deleted:
+        raise NotFoundError("Alert not found")
+    return {"deleted": True}
+
+
+@app.post("/api/alerts/{alert_id}/reset")
+def alerts_reset(alert_id: str, user: UserProfile = Depends(require_pro)):
+    """Re-arm a fired alert so it can fire again (one-shot semantics)."""
+    reset = _alerts().reset_rule(user, alert_id)
+    if not reset:
+        raise NotFoundError("Alert not found")
+    return {"reset": True}
+
+
+@app.post("/api/alerts/evaluate")
+def alerts_evaluate(symbols: list[str] = Body(default=[]), user: UserProfile = Depends(require_pro)):
+    """Run all my enabled rules against the live market; report fired alerts.
+
+    ``symbols`` optionally bounds the universe (watchlist-first). Each rule is
+    one-shot until reset, so this endpoint never spams.
+    """
+    return {"fired": _alerts().evaluate_user_alerts(user, symbols)}
+
+
+# --------------------------------------------------------------------------- #
+# PWA push subscriptions (Phase 5) — opt-in browser notifications
+# --------------------------------------------------------------------------- #
+
+class PushSubscribeBody(BaseModel):
+    endpoint: str = Field(..., min_length=8, max_length=512)
+    p256dh: str = ""
+    auth: str = ""
+    user_agent: str = ""
+
+
+@app.get("/api/push/public-key")
+def push_public_key():
+    """VAPID public key for the service worker (base64url, no padding)."""
+    return {"public_key": config.push.vapid_public_key}
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(body: PushSubscribeBody, user: UserProfile = Depends(require_auth)):
+    """Register this browser endpoint for push notifications."""
+    from screener.core.subscription_models import PushSubscription
+
+    sub = PushSubscription(
+        user_id=user.user_id,
+        endpoint=body.endpoint,
+        p256dh=body.p256dh,
+        auth=body.auth,
+        user_agent=body.user_agent,
+    )
+    subscription_store.upsert_push_subscription(sub)
+    return {"subscribed": True}
+
+
+@app.delete("/api/push/subscribe")
+def push_unsubscribe(endpoint: str, user: UserProfile = Depends(require_auth)):
+    """Remove this browser endpoint (called when the SW unsubscribes)."""
+    subscription_store.delete_push_subscription(endpoint)
+    return {"unsubscribed": True}
+
+
+# --------------------------------------------------------------------------- #
+# Check-before-buy (Phase 5) — research checklist + broker deep-links
+# --------------------------------------------------------------------------- #
+
+def _check() -> CheckBeforeBuyService:
+    return get_service(CheckBeforeBuyService)
+
+
+@app.get("/api/check/brokers")
+def check_brokers(user: UserProfile = Depends(get_current_user)):
+    """Brokers we can deep-link to (review-only; never order placement)."""
+    return {"brokers": _check().brokers()}
+
+
+@app.get("/api/check/deep-link/{broker_id}")
+def check_deep_link(broker_id: str, symbol: str, user: UserProfile = Depends(get_current_user)):
+    """Review-only deep-link to the symbol page in a user's broker app."""
+    return _check().broker_deep_link(broker_id, symbol)
+
+
+@app.get("/api/check/{symbol}")
+def check_before_buy(symbol: str, user: UserProfile = Depends(get_current_user)):
+    """Pre-trade checklist for a symbol (price vs plan, valuation, sizing)."""
+    if not symbol or len(symbol) > 50:
+        raise ValidationError("Invalid symbol")
+    analysis = get_service(AnalysisService)
+    preferences = get_service(PreferencesService)
+    effective_config = preferences.get_effective_config(user.user_id)
+    try:
+        rec = analysis.analyze(symbol, effective_config)
+    except Exception as e:
+        raise DataSourceError(f"Unable to analyze {symbol}: {e}")
+    if rec.error is not None:
+        raise AppException(
+            ErrorCodes.INSUFFICIENT_DATA,
+            f"No checklist is available for {symbol.upper()}: {rec.error}.",
+            422,
+        )
+    return _check().checklist(user, rec)
+
+
+# --------------------------------------------------------------------------- #
+# Feedback loop (Phase 5) — instrumented outcomes + published changelog
+# --------------------------------------------------------------------------- #
+
+def _feedback_loop() -> FeedbackLoopService:
+    return get_service(FeedbackLoopService)
+
+
+class PublishChangeBody(BaseModel):
+    version: str = "1.0.0"
+    date: str | None = None
+    title: str = Field(..., min_length=3, max_length=120)
+    summary: str = ""
+    weight_changes: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+@app.get("/api/feedback-loop/outcomes")
+def feedback_outcomes(user: UserProfile = Depends(get_current_user)):
+    """Instrumented per-band hit rates from matured signals."""
+    return _feedback_loop().outcome_stats()
+
+
+@app.get("/api/feedback-loop/suggestions")
+def feedback_suggestions(user: UserProfile = Depends(get_current_user)):
+    """Suggested weight changes — returned for review, never auto-applied."""
+    return _feedback_loop().weight_suggestions()
+
+
+@app.get("/api/feedback-loop/changelog")
+def feedback_changelog(user: UserProfile = Depends(get_current_user)):
+    """Publicly published scoring-model changes (transparency ledger)."""
+    return {"entries": _feedback_loop().changelog()}
+
+
+@app.post("/api/feedback-loop/publish")
+def feedback_publish(body: PublishChangeBody, user: UserProfile = Depends(require_product_owner)):
+    """Record a reviewed weight change in the published changelog (PO only)."""
+    entry = _feedback_loop().publish_change(user, body.model_dump())
+    return entry.model_dump(mode="json")
 
 
 # --------------------------------------------------------------------------- #

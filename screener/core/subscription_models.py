@@ -141,6 +141,70 @@ class AlertEvaluation(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Standalone alert rules (Phase 5) — price, screen-hit, MF NAV thresholds
+# --------------------------------------------------------------------------- #
+
+
+class AlertRuleType(str, Enum):
+    PRICE = "price"                # symbol price crosses a threshold
+    SCREEN_HIT = "screen_hit"      # a saved screen gains a new match
+    MF_NAV = "mf_nav"              # mutual-fund NAV crosses a threshold
+
+
+class AlertRule(BaseModel):
+    """A user-owned alert. ``trigger_value`` is interpreted by ``direction``:
+    for price/MF-NAV it is the price or NAV level; for screen_hit it is the
+    minimum number of new matches. Notifications are best-effort (outbox).
+    """
+
+    alert_id: str
+    user_id: str
+    rule_type: AlertRuleType
+    name: str
+    symbol: str | None = None          # required for price; optional for screen_hit
+    scheme_code: str | None = None     # required for mf_nav
+    direction: str = "above"           # above | below
+    trigger_value: float = 0.0
+    screen_id: str | None = None       # for screen_hit rules
+    last_fired_at: datetime | None = None
+    last_value: float | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    enabled: bool = True
+
+    def fired(self, value: float) -> bool:
+        """True when ``value`` crosses the threshold for the first time."""
+        if not self.enabled:
+            return False
+        crossed = value > self.trigger_value if self.direction == "above" else value < self.trigger_value
+        if not crossed:
+            return False
+        return self.last_fired_at is None  # one-shot until re-armed by reset
+
+
+class PushSubscription(BaseModel):
+    """A browser push endpoint the user opted into (PWA notifications)."""
+
+    user_id: str
+    endpoint: str
+    p256dh: str = ""
+    auth: str = ""
+    user_agent: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ChangelogEntry(BaseModel):
+    """A published change to the scoring model (feedback-loop transparency)."""
+
+    entry_id: str
+    version: str
+    date: str
+    title: str
+    summary: str
+    weight_changes: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    published: bool = True
+
+
+# --------------------------------------------------------------------------- #
 # SQLite subscription store
 # --------------------------------------------------------------------------- #
 
@@ -222,6 +286,53 @@ class SubscriptionStore:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_checkout_user ON checkout_sessions(user_id, created_at)"
+            )
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS alert_rules (
+                    alert_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    rule_type TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    symbol TEXT,
+                    scheme_code TEXT,
+                    direction TEXT DEFAULT 'above',
+                    trigger_value REAL NOT NULL,
+                    screen_id TEXT,
+                    last_fired_at TEXT,
+                    last_value REAL,
+                    created_at TEXT,
+                    enabled INTEGER DEFAULT 1
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_alerts_user ON alert_rules(user_id, created_at)"
+            )
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS push_subscriptions (
+                    endpoint TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    p256dh TEXT DEFAULT '',
+                    auth TEXT DEFAULT '',
+                    user_agent TEXT DEFAULT '',
+                    created_at TEXT
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)"
+            )
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS changelog (
+                    entry_id TEXT PRIMARY KEY,
+                    version TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    weight_changes TEXT NOT NULL DEFAULT '{}',
+                    published INTEGER DEFAULT 1
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_changelog_date ON changelog(date)"
             )
 
     # ------------------------------------------------------------- subscription
@@ -376,7 +487,207 @@ class SubscriptionStore:
             )
             return cur.rowcount > 0
 
+    # ------------------------------------------------------------------ alerts
+
+    def upsert_alert(self, rule: AlertRule) -> AlertRule:
+        with self._connection() as conn:
+            conn.execute(
+                "INSERT INTO alert_rules (alert_id, user_id, rule_type, name, symbol,"
+                " scheme_code, direction, trigger_value, screen_id, last_fired_at,"
+                " last_value, created_at, enabled)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT(alert_id) DO UPDATE SET"
+                " name=excluded.name, rule_type=excluded.rule_type, symbol=excluded.symbol,"
+                " scheme_code=excluded.scheme_code, direction=excluded.direction,"
+                " trigger_value=excluded.trigger_value, screen_id=excluded.screen_id,"
+                " enabled=excluded.enabled",
+                (
+                    rule.alert_id,
+                    rule.user_id,
+                    rule.rule_type.value,
+                    rule.name,
+                    rule.symbol,
+                    rule.scheme_code,
+                    rule.direction,
+                    rule.trigger_value,
+                    rule.screen_id,
+                    rule.last_fired_at.isoformat() if rule.last_fired_at else None,
+                    rule.last_value,
+                    rule.created_at.isoformat(),
+                    1 if rule.enabled else 0,
+                ),
+            )
+        return rule
+
+    def get_alert(self, alert_id: str, user_id: str) -> AlertRule | None:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM alert_rules WHERE alert_id = ? AND user_id = ?",
+                (alert_id, user_id),
+            ).fetchone()
+        return self._row_to_alert(row) if row else None
+
+    def list_alerts(self, user_id: str) -> list[AlertRule]:
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM alert_rules WHERE user_id = ? ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+        return [self._row_to_alert(r) for r in rows]
+
+    def delete_alert(self, alert_id: str, user_id: str) -> bool:
+        with self._connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM alert_rules WHERE alert_id = ? AND user_id = ?",
+                (alert_id, user_id),
+            )
+            return cur.rowcount > 0
+
+    def mark_alert_fired(self, alert_id: str, value: float) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                "UPDATE alert_rules SET last_fired_at = ?, last_value = ? WHERE alert_id = ?",
+                (datetime.utcnow().isoformat(), value, alert_id),
+            )
+
+    def reset_alert(self, alert_id: str, user_id: str) -> bool:
+        with self._connection() as conn:
+            cur = conn.execute(
+                "UPDATE alert_rules SET last_fired_at = NULL, last_value = NULL "
+                "WHERE alert_id = ? AND user_id = ?",
+                (alert_id, user_id),
+            )
+            return cur.rowcount > 0
+
+    # --------------------------------------------------------- push subscripts
+
+    def upsert_push_subscription(self, sub: PushSubscription) -> PushSubscription:
+        with self._connection() as conn:
+            conn.execute(
+                "INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth,"
+                " user_agent, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,"
+                " p256dh=excluded.p256dh, auth=excluded.auth",
+                (
+                    sub.endpoint,
+                    sub.user_id,
+                    sub.p256dh,
+                    sub.auth,
+                    sub.user_agent,
+                    sub.created_at.isoformat(),
+                ),
+            )
+        return sub
+
+    def list_push_subscriptions(self, user_id: str) -> list[PushSubscription]:
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM push_subscriptions WHERE user_id = ?",
+                (user_id,),
+            ).fetchall()
+        return [
+            PushSubscription(
+                user_id=r["user_id"],
+                endpoint=r["endpoint"],
+                p256dh=r["p256dh"],
+                auth=r["auth"],
+                user_agent=r["user_agent"],
+                created_at=datetime.fromisoformat(r["created_at"]),
+            )
+            for r in rows
+        ]
+
+    def delete_push_subscription(self, endpoint: str) -> bool:
+        with self._connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,)
+            )
+            return cur.rowcount > 0
+
+    # ---------------------------------------------------------------- changelog
+
+    def upsert_changelog(self, entry: ChangelogEntry) -> ChangelogEntry:
+        with self._connection() as conn:
+            conn.execute(
+                "INSERT INTO changelog (entry_id, version, date, title, summary,"
+                " weight_changes, published)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT(entry_id) DO UPDATE SET version=excluded.version,"
+                " date=excluded.date, title=excluded.title, summary=excluded.summary,"
+                " weight_changes=excluded.weight_changes, published=excluded.published",
+                (
+                    entry.entry_id,
+                    entry.version,
+                    entry.date,
+                    entry.title,
+                    entry.summary,
+                    json.dumps(entry.weight_changes),
+                    1 if entry.published else 0,
+                ),
+            )
+        return entry
+
+    def list_changelog(self) -> list[ChangelogEntry]:
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM changelog ORDER BY date DESC"
+            ).fetchall()
+        return [
+            ChangelogEntry(
+                entry_id=r["entry_id"],
+                version=r["version"],
+                date=r["date"],
+                title=r["title"],
+                summary=r["summary"],
+                weight_changes=json.loads(r["weight_changes"] or "{}"),
+                published=bool(r["published"]),
+            )
+            for r in rows
+        ]
+
+    def get_changelog(self, entry_id: str) -> ChangelogEntry | None:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM changelog WHERE entry_id = ?", (entry_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return ChangelogEntry(
+            entry_id=row["entry_id"],
+            version=row["version"],
+            date=row["date"],
+            title=row["title"],
+            summary=row["summary"],
+            weight_changes=json.loads(row["weight_changes"] or "{}"),
+            published=bool(row["published"]),
+        )
+
     # ------------------------------------------------------------- row helpers
+
+    @staticmethod
+    def _row_to_alert(row: sqlite3.Row) -> AlertRule:
+        def _dt(value: str | None) -> datetime | None:
+            try:
+                return datetime.fromisoformat(value) if value else None
+            except Exception:
+                return None
+
+        return AlertRule(
+            alert_id=row["alert_id"],
+            user_id=row["user_id"],
+            rule_type=AlertRuleType(row["rule_type"]),
+            name=row["name"],
+            symbol=row["symbol"],
+            scheme_code=row["scheme_code"],
+            direction=row["direction"] or "above",
+            trigger_value=float(row["trigger_value"] or 0.0),
+            screen_id=row["screen_id"],
+            last_fired_at=_dt(row["last_fired_at"]),
+            last_value=float(row["last_value"]) if row["last_value"] is not None else None,
+            created_at=_dt(row["created_at"]) or datetime.utcnow(),
+            enabled=bool(row["enabled"]),
+        )
 
     @staticmethod
     def _row_to_subscription(row: sqlite3.Row) -> Subscription:

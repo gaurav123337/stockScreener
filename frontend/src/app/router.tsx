@@ -36,6 +36,12 @@ const ProPage = lazy(() => import("@/features/pro/ProPage"));
 const ProScreensPage = lazy(() => import("@/features/pro/ProScreensPage"));
 const ProPortfolioPage = lazy(() => import("@/features/pro/ProPortfolioPage"));
 const ProBacktestPage = lazy(() => import("@/features/pro/ProBacktestPage"));
+const LearnPage = lazy(() => import("@/features/learn/LearnPage"));
+const LearnDetailPage = lazy(() => import("@/features/learn/LearnDetailPage"));
+const AlertsPage = lazy(() => import("@/features/alerts/AlertsPage"));
+const ProofPage = lazy(() => import("@/features/proof/ProofPage"));
+const CheckPage = lazy(() => import("@/features/check/CheckPage"));
+const FeedbackLoopPage = lazy(() => import("@/features/feedback-loop/FeedbackLoopPage"));
 const IndexRedirect = lazy(() => import("./IndexRedirect"));
 
 export const router = createHashRouter([
@@ -72,6 +78,12 @@ export const router = createHashRouter([
       { path: "pro/screens", element: <ProScreensPage /> },
       { path: "pro/portfolio", element: <ProPortfolioPage /> },
       { path: "pro/backtest", element: <ProBacktestPage /> },
+      { path: "learn", element: <LearnPage /> },
+      { path: "learn/:slug", element: <LearnDetailPage /> },
+      { path: "alerts", element: <AlertsPage /> },
+      { path: "proof", element: <ProofPage /> },
+      { path: "check", element: <CheckPage /> },
+      { path: "feedback-loop", element: <FeedbackLoopPage /> },
       { path: "auth/login", element: <LoginPage /> },
       { path: "auth/register", element: <RegisterPage /> },
       { path: "auth/forgot-password", element: <ForgotPasswordPage /> },

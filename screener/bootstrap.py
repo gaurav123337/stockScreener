@@ -21,10 +21,14 @@ from screener.infrastructure.persistence.csv_repository import (
 )
 from screener.services import (
     AnalysisService,
+    AlertService,
     AuthService,
     BacktestService,
     BrokerService,
+    CheckBeforeBuyService,
+    ContentService,
     ControlCenterService,
+    FeedbackLoopService,
     FeedbackService,
     FilterService,
     KnowledgeService,
@@ -33,6 +37,7 @@ from screener.services import (
     RiskProfileService,
     PlanService,
     ScanService,
+    ScorecardService,
     SubscriptionService,
     VerificationService,
     IndianMarketService,
@@ -58,13 +63,17 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(KnowledgeStore, MarkdownKnowledgeStore)
     # Services
     container.register(AnalysisService, AnalysisService)
+    container.register(AlertService, AlertService)
     container.register(ScanService, ScanService)
     container.register(VerificationService, VerificationService)
     container.register(BacktestService, BacktestService)
     container.register(KnowledgeService, KnowledgeService)
     container.register(FilterService, FilterService)
     container.register(BrokerService, BrokerService)
+    container.register(CheckBeforeBuyService, CheckBeforeBuyService)
     container.register(ControlCenterService, ControlCenterService)
+    container.register(ContentService, ContentService)
+    container.register(FeedbackLoopService, FeedbackLoopService)
     # Feedback is persisted to SQLite and retrieved through the protected
     # Product Owner API. Email is intentionally not part of the request path.
     container.register(FeedbackService, FeedbackService)
@@ -74,6 +83,7 @@ def bootstrap(environment: str | None = None) -> None:
     container.register(RiskProfileService, RiskProfileService)
     container.register(PlanService, PlanService)
     container.register(SubscriptionService, SubscriptionService)
+    container.register(ScorecardService, ScorecardService)
     container.register(IndianMarketService, factory=lambda: IndianMarketService(get_service(IndianMarketGateway)))
     container.register(
         MutualFundService,

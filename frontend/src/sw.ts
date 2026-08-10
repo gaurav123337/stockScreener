@@ -49,4 +49,55 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+/**
+ * PWA push notifications (Phase 5) — alert delivery surface.
+ * The service worker turns an incoming web-push payload into a system
+ * notification. Clicking it focuses an open tab (or opens one) and routes to
+ * the alert's target page.
+ */
+self.addEventListener("push", (event) => {
+  let data: {
+    title?: string;
+    body?: string;
+    url?: string;
+    tag?: string;
+  } = {};
+  try {
+    const parsed = event.data?.json?.();
+    if (parsed && typeof parsed === "object") data = parsed;
+  } catch {
+    // Fall back to raw text if the payload is not JSON.
+    data = { title: event.data?.text?.() ?? "stockScreener alert" };
+  }
+  const title = data.title ?? "stockScreener alert";
+  const options: NotificationOptions = {
+    body: data.body ?? "",
+    tag: data.tag ?? "screener-alert",
+    icon: "/pwa-192x192.png",
+    badge: "/pwa-192x192.png",
+    data: { url: data.url ?? "/" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  const url = (event.notification.data as { url?: string } | undefined)?.url ?? "/";
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const win of windows) {
+        if ("focus" in win) {
+          win.focus();
+          void win.navigate(url);
+          return;
+        }
+      }
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(url);
+      }
+    })(),
+  );
+});
+
 export {};

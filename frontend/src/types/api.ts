@@ -739,4 +739,172 @@ export interface StrategyBacktest {
   >;
   horizons: StrategyBacktestHorizon[];
   methodology: string[];
+  notes: string[];
+}
+
+/* ------------------- Learn moat, scorecard & stories (Phase 5) -------------- */
+
+export interface ArticleSummary {
+  slug: string;
+  title: string;
+  tagline: string;
+  category: string;
+  reading_minutes: number;
+  word_count: number;
+  excerpt: string;
+  related_slugs: string[];
+  updated_at: string;
+}
+
+export interface ArticleSection {
+  heading: string;
+  body: string;
+  bullets: string[];
+}
+
+export interface Article extends ArticleSummary {
+  seo_meta: Record<string, string>;
+  sections: ArticleSection[];
+  published: boolean;
+}
+
+export interface ScorecardHorizon {
+  horizon_days: number;
+  n: number;
+  hit_rate: number | null;
+  avg_return: number | null;
+  benchmark_avg_return: number | null;
+  vs_benchmark: number | null;
+  max_drawdown: number | null;
+}
+
+export interface MonthlyScorecard {
+  period: string;
+  generated_at: string;
+  source: string;
+  universe_size: number;
+  window_start: string | null;
+  window_end: string | null;
+  horizons: ScorecardHorizon[];
+  live_evaluated: number | null;
+  live_overall_hit_rate: number | null;
+  benchmark_symbol: string | null;
+  methodology: string[];
+  notes: string[];
+  disclaimer: string;
+}
+export interface SuccessStory {
+  id: string;
+  kind: string;
+  title: string;
+  persona: string;
+  walkthrough: string;
+  lesson: string;
+  illustrative: boolean;
+}
+
+/* ----------------------------- Alerts (Phase 5) ----------------------------- */
+
+export type AlertRuleType = "price" | "screen_hit" | "mf_nav";
+
+export interface AlertRule {
+  alert_id: string;
+  user_id: string;
+  rule_type: AlertRuleType;
+  name: string;
+  symbol: string | null;
+  scheme_code: string | null;
+  direction: "above" | "below";
+  trigger_value: number;
+  screen_id: string | null;
+  last_fired_at: string | null;
+  last_value: number | null;
+  created_at: string;
+  enabled: boolean;
+}
+
+export interface FiredAlert {
+  alert_id: string;
+  rule_type: AlertRuleType;
+  name: string;
+  symbol: string | null;
+  scheme_code: string | null;
+  value: number;
+  trigger_value: number;
+  direction: string;
+  fired_at: string;
+}
+
+/* -------------------- Check-before-buy (Phase 5) ---------------------------- */
+
+export interface BrokerLink {
+  id: string;
+  name: string;
+}
+
+export interface CheckItem {
+  title: string;
+  text: string;
+  level: "green" | "amber" | "red" | "info";
+  guidance: string;
+}
+
+export interface CheckBeforeBuy {
+  symbol: string;
+  price: number;
+  action: Action;
+  score: number;
+  risk_badge: string | null;
+  verdict: "green" | "amber";
+  items: CheckItem[];
+  brokers: BrokerLink[];
+  generated_at: string;
+  disclaimer: string;
+}
+
+/* --------------------------- Feedback loop (Phase 5) ------------------------ */
+
+export interface OutcomeBand {
+  n: number;
+  hit_rate: number | null;
+  avg_return_pct: number | null;
+}
+
+export interface FeedbackOutcomes {
+  evaluated: number;
+  overall_hit_rate: number | null;
+  by_score_band: Record<string, OutcomeBand>;
+  by_action: Record<string, OutcomeBand>;
+  score_predictiveness: number | null;
+  horizon_days: number | null;
+  window_start: string | null;
+  generated_at: string;
+}
+
+export interface WeightSuggestion {
+  pillar: string;
+  current_weight: number;
+  suggested_weight: number;
+  direction: string;
+  reason: string;
+}
+
+export interface FeedbackSuggestions {
+  sufficient_data: boolean;
+  evaluated: number;
+  score_predictiveness: number | null;
+  suggestions: WeightSuggestion[];
+  message: string;
+  pillar_totals: Record<string, number>;
+  generated_at: string;
+}
+
+export interface ChangelogEntry {
+  entry_id: string;
+  version: string;
+  date: string;
+  title: string;
+  summary: string;
+  weight_changes: Record<string, Record<string, unknown>>;
+  published: boolean;
 }
