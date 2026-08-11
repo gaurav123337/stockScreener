@@ -114,6 +114,24 @@ export interface AdminOverview {
   recent_config_publications: ConfigPublication[];
 }
 
+export interface AnalyticsFunnelStep {
+  step: string;
+  users: number;
+}
+
+export interface AnalyticsOverview {
+  generated_at: string;
+  dau: number;
+  wau: number;
+  total_users: number;
+  funnel: AnalyticsFunnelStep[];
+  free_to_pro_conversion: number;
+  trial_to_paid_conversion: number;
+  retention_90d: number;
+  mrr_inr: number;
+  push_opt_in_rate: number;
+}
+
 export interface ConfigPublication {
   version: number;
   values: Settings;

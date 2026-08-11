@@ -156,6 +156,7 @@ class ScorecardService:
                 else "walk-forward backtest (live verification pending monthly refresh)"
             ),
             "universe_size": report.universe_size,
+            "universe_coverage": report.universe_coverage,
             "window_start": report.window_start.isoformat() if report.window_start else None,
             "window_end": report.window_end.isoformat() if report.window_end else None,
             "horizons": horizon_cards,

@@ -6,6 +6,7 @@ import type {
   AlertEvaluation,
   AlertRule,
   AlertRuleType,
+  AnalyticsOverview,
   Article,
   ArticleSummary,
   AuditEvent,
@@ -97,6 +98,7 @@ export const api = {
 
   /* Product owner control center */
   adminOverview: () => http.get<AdminOverview>("/api/admin/overview"),
+  adminAnalytics: () => http.get<AnalyticsOverview>("/api/admin/analytics"),
   adminUsers: (query = "") =>
     http.get<Paginated<AdminUser>>(`/api/admin/users${query ? `?${query}` : ""}`),
   adminUser: (userId: string) =>

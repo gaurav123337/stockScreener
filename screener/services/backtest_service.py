@@ -248,10 +248,11 @@ class BacktestService:
             window_end=datetime.combine(today, datetime.min.time()),
             universe=list(data.keys()),
             universe_size=len(data),
+            universe_coverage=_universe_coverage(data),
             horizons=stats,
             methodology=[
                 f"Walk-forward replay of the exact production signal engine",
-                f"Universe: {len(data)} NIFTY50 constituents",
+                f"Universe: {len(data)} symbols ({_universe_label(data)})",
                 f"One signal sampled per symbol every {config.backtest.sample_every_days} days from {start}",
                 f"Indicators at time t use only data up to t (no lookahead)",
                 f"Each signal measured at {len(horizons)} horizons: {', '.join(f'{h}d' for h in horizons)}",
@@ -326,3 +327,36 @@ class BacktestService:
 def _as_utc(dt: datetime) -> datetime:
     """Normalize a possibly-naive timestamp to aware UTC for age math."""
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+def _universe_label(data: dict) -> str:
+    """A human label for the replayed universe (Nifty 500 / Nifty 50 / custom)."""
+    try:
+        from screener import universe as _universe
+
+        keys = set(data.keys())
+        if keys == set(_universe.default_universe()):
+            return "Nifty 500"
+        if keys == set(_universe.NIFTY50):
+            return "Nifty 50"
+    except Exception:  # noqa: BLE001 — label is cosmetic
+        pass
+    return f"{len(data)} custom symbols"
+
+
+def _universe_coverage(data: dict) -> float | None:
+    """Fraction (0..1) of the app's screening universe covered by the replay.
+
+    Returns None when the default universe can't be determined (e.g. a focused
+    per-symbol replay), so the scorecard can still publish without the metric.
+    """
+    try:
+        from screener import universe as _universe
+
+        default = set(_universe.default_universe())
+    except Exception:  # noqa: BLE001
+        return None
+    if not default:
+        return None
+    covered = set(data.keys()) & default
+    return round(len(covered) / len(default), 4)

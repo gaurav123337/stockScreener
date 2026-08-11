@@ -332,6 +332,12 @@ class UserStore:
             rows = conn.execute("SELECT * FROM users ORDER BY created_at").fetchall()
         return [self._row_to_record(r) for r in rows]
 
+    def count_users(self) -> int:
+        """Total registered users."""
+        with self._connection() as conn:
+            row = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()
+        return int(row["n"]) if row else 0
+
     def update_account(self, user_id: str, **changes: Any) -> UserRecord | None:
         allowed = {"email", "normalized_email", "email_verified_at", "role", "status", "tier", "last_login_at", "token_version", "password_hash", "password_salt"}
         values = {key: value for key, value in changes.items() if key in allowed}

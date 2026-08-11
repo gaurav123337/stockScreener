@@ -75,6 +75,11 @@ def test_backtest_replay_produces_dated_horizon_stats(tmp_path, monkeypatch):
     assert report.universe_size == 1
     assert len(report.horizons) == 2
 
+    # Custom universe (not the full Nifty 500): coverage is 0 against the
+    # app's screening universe, and the label says so explicitly.
+    assert report.universe_coverage == 0.0
+    assert any("custom symbols" in m for m in report.methodology)
+
     by_h = {h.horizon_days: h for h in report.horizons}
     # A strong monotonic uptrend yields a positive signal hit-rate and a
     # positive average return at every matured horizon.
@@ -86,7 +91,7 @@ def test_backtest_replay_produces_dated_horizon_stats(tmp_path, monkeypatch):
     assert by_h[365].n > 0
 
     assert len(report.methodology) >= 4
-    assert any("NIFTY50" in m for m in report.methodology)
+    assert any("custom symbols" in m for m in report.methodology)
     assert any("no lookahead" in m for m in report.methodology)
 
 
@@ -125,3 +130,40 @@ def test_backtest_cache_serves_fresh_and_runs_when_stale(tmp_path, monkeypatch):
 def test_backtest_report_file_is_gitignored():
     gitignore = Path(__file__).resolve().parent.parent / ".gitignore"
     assert "data/backtest_report.json" in gitignore.read_text()
+
+
+def test_backtest_universe_defaults_to_full_screening_universe(monkeypatch):
+    """The published track record must cover the app's screening universe,
+    not just the Nifty 50 — otherwise the dated hit-rate omits ~90% of the
+    names the app actually recommends on."""
+    from screener import universe as _universe
+
+    default = _universe.default_universe()
+    assert len(default) >= 400, "screening universe should be Nifty 500-sized"
+    assert set(config.backtest.universe) == set(default)
+
+
+def test_backtest_full_universe_coverage_is_high(tmp_path, monkeypatch):
+    """Replaying the full default universe reports ≥90% coverage, satisfying
+    the trust KPI that recommended names carry a dated published hit-rate."""
+    from screener import universe as _universe
+
+    full = _universe.default_universe()
+    subset = full[:20]
+    monkeypatch.setattr(config.backtest, "universe", subset)
+    monkeypatch.setattr(config.verification, "horizons", [30])
+
+    provider = FakeProvider(
+        {sym: _rising() for sym in subset},
+        info={"returnOnEquity": 0.2, "pegRatio": 0.8},
+    )
+    provider._frames["^NSEI"] = _rising(base=50.0, step=0.001)
+    service = BacktestService(
+        data_provider=provider,
+        report_file=str(tmp_path / "backtest_report.json"),
+    )
+    report = service.run()
+
+    # 20 of 500 names covered = 4%; the metric must reflect that honestly.
+    assert report.universe_size == 20
+    assert report.universe_coverage == round(20 / len(full), 4)

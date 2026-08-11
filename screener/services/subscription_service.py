@@ -297,6 +297,61 @@ class SubscriptionService:
         return self.admin_revoke_pro(user_id)
 
     # ------------------------------------------------------------------ #
+    # Billing KPIs (product-owner analytics surface)
+    # ------------------------------------------------------------------ #
+
+    def paid_mrr(self) -> float:
+        """Monthly recurring revenue from active paid subscriptions (INR).
+
+        Yearly plans are normalized to their monthly equivalent
+        (price/12) so MRR is comparable regardless of billing interval.
+        """
+        from screener.core.subscription_models import subscription_store as store
+
+        plans = {p["id"]: p for p in self.plans()}
+        total = 0.0
+        for row in store._list_subscriptions():
+            status = (row.get("status") or "none")
+            if status not in (SubscriptionStatus.ACTIVE.value, SubscriptionStatus.TRIAL.value):
+                continue
+            if status == SubscriptionStatus.TRIAL.value:
+                continue  # trials are not revenue yet
+            plan = plans.get(row.get("plan_id"))
+            if plan is None:
+                continue
+            price = float(plan["price_inr"] or 0)
+            total += price / 12.0 if plan["interval"] == "year" else price
+        return round(total, 2)
+
+    def trial_to_paid_conversion(self) -> float:
+        """Share of users who ever opened a checkout and ultimately paid."""
+        from screener.core.subscription_models import subscription_store as store
+
+        rows = store._list_checkouts()
+        starters: dict[str, bool] = {}
+        payers: dict[str, bool] = {}
+        for row in rows:
+            uid = row.get("user_id")
+            if uid is None:
+                continue
+            starters[uid] = True
+            if (row.get("status") or "") == "paid":
+                payers[uid] = True
+        if not starters:
+            return 0.0
+        return round(len(payers) / len(starters), 4)
+
+    def push_opt_in_rate(self) -> float:
+        """Share of users who opted into browser push notifications."""
+        from screener.core.subscription_models import subscription_store as store
+
+        users_with_push = store._distinct_push_users()
+        total = self._user_db.count_users()
+        if total <= 0:
+            return 0.0
+        return round(users_with_push / total, 4)
+
+    # ------------------------------------------------------------------ #
     # Receipt outbox (dev delivery adapter; production ships to the provider)
     # ------------------------------------------------------------------ #
 

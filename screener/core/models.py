@@ -226,6 +226,10 @@ class BacktestReport(BaseModel):
     horizons: list[HorizonStats] = Field(default_factory=list)
     methodology: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    # Coverage: share of the app's screening universe covered by this replay
+    # (0..1). The trust KPI is that ≥90% of recommended names carry a dated,
+    # published hit-rate; this makes that explicit and auditable.
+    universe_coverage: float | None = None
 
 
 class RiskLevel(str, Enum):

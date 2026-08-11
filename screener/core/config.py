@@ -104,7 +104,9 @@ class BacktestConfig(BaseSettings):
     max_horizon_days: int = 365
     # Published report freshness (how long /api/backtest may serve cached data).
     cache_ttl_seconds: int = 43_200
-    universe: list[str] = Field(default_factory=lambda: list(universe.NIFTY50))
+    # The published track record replays the full screening universe (Nifty 500)
+    # so the dated hit-rate covers the same names the app recommends on.
+    universe: list[str] = Field(default_factory=lambda: list(universe.default_universe()))
 
 
 class IndianApiConfig(BaseSettings):

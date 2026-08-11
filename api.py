@@ -51,6 +51,7 @@ from screener.core.user_models import UserCreate, UserLogin, UserProfile
 from screener.services import (
     AnalysisService,
     AlertService,
+    AnalyticsService,
     AuthService,
     BacktestService,
     BrokerService,
@@ -383,6 +384,7 @@ def register(body: UserCreate):
     """Create a new user account."""
     auth = get_service(AuthService)
     result = auth.register(body)
+    _analytics().track(result.user.user_id, "auth_register")
     return result.model_dump(mode="json")
 
 
@@ -391,6 +393,7 @@ def login(body: UserLogin):
     """Log in and get an access token."""
     auth = get_service(AuthService)
     result = auth.login(body)
+    _analytics().track(result.user.user_id, "auth_login")
     return result.model_dump(mode="json")
 
 
@@ -440,6 +443,17 @@ def reset_password(body: PasswordResetBody):
 @app.get("/api/admin/overview")
 def admin_overview(user: UserProfile = Depends(require_product_owner)):
     return get_service(ControlCenterService).dashboard()
+
+
+@app.get("/api/admin/analytics")
+def admin_analytics(user: UserProfile = Depends(require_product_owner)):
+    """Product KPIs from the real event log + billing state.
+
+    DAU/WAU, activation funnel, Free->Pro conversion, trial->paid, 90-day
+    retention, MRR and push opt-in rate — the Phase-5 audit KPIs that were
+    previously unmeasured. Computed at query time; no event source is hit.
+    """
+    return _analytics().overview_dict()
 
 
 @app.get("/api/admin/users")
@@ -604,6 +618,7 @@ def get_risk_profile(user: UserProfile = Depends(get_current_user)):
 def save_risk_profile(body: RiskProfileBody, user: UserProfile = Depends(get_current_user)):
     """Score and persist the user's risk profile from questionnaire answers."""
     profile = get_service(RiskProfileService).save_profile(user.user_id, body.answers)
+    _analytics().track(user.user_id, "risk_profile_saved")
     return profile.model_dump(mode="json")
 
 
@@ -622,6 +637,10 @@ def build_plan(body: PlanBody, user: UserProfile = Depends(get_current_user)):
         )
     except Exception as e:
         raise DataSourceError(f"Plan could not be built: {e}")
+    _analytics().track(
+        user.user_id, "plan_built",
+        risk_level=body.risk_level, horizon_years=body.horizon_years,
+    )
     return plan.model_dump(mode="json")
 
 
@@ -692,6 +711,10 @@ def mutual_fund_screener(
         result = get_service(MutualFundService).screener(request)
     except Exception as e:
         raise DataSourceError(f"Mutual-fund screener failed: {e}")
+    _analytics().track(
+        user.user_id, "mf_screener",
+        category=category or "", direct_only=direct_only,
+    )
     return result.model_dump(mode="json")
 
 
@@ -721,6 +744,10 @@ def mutual_fund_recommend(body: FundRecommendBody, user: UserProfile = Depends(g
         raise ValidationError(f"Invalid risk level: {e}")
     except Exception as e:
         raise DataSourceError(f"Mutual-fund recommendation failed: {e}")
+    _analytics().track(
+        user.user_id, "mf_recommend",
+        risk_level=body.risk_level, goal=body.goal,
+    )
     return basket.model_dump(mode="json")
 
 
@@ -745,6 +772,7 @@ def mutual_fund_sip(body: SipBody, user: UserProfile = Depends(get_current_user)
         assumed_return_pct=body.assumed_return_pct,
         step_up_pct=body.step_up_pct,
     )
+    _analytics().track(user.user_id, "mf_sip", mode=body.mode)
     return result.model_dump(mode="json")
 
 
@@ -856,6 +884,12 @@ def scan(body: ScanBody, user: UserProfile = Depends(get_current_user)):
         )
     except Exception as e:
         raise DataSourceError(f"Scan failed: {e}")
+
+    _analytics().track(
+        user.user_id, "scan_run",
+        matched=len(result.matched), total_scanned=result.total_scanned,
+        filter=body.filter or "", has_where=bool(body.where),
+    )
 
     # Persist the served signals so the product's track record stays auditable
     # (every call is dated and attributable to the requesting user).
@@ -1421,6 +1455,10 @@ def _billing() -> SubscriptionService:
     return get_service(SubscriptionService)
 
 
+def _analytics() -> AnalyticsService:
+    return get_service(AnalyticsService)
+
+
 class CheckoutBody(BaseModel):
     plan_id: str = Field(..., min_length=3, max_length=40)
 
@@ -1463,13 +1501,20 @@ def billing_entitlements(user: UserProfile = Depends(require_auth)):
 @app.post("/api/billing/checkout")
 def billing_checkout(body: CheckoutBody, user: UserProfile = Depends(require_auth)):
     """Open a checkout session for a plan (unpaid until confirmed)."""
-    return _billing().create_checkout(user, body.plan_id)
+    result = _billing().create_checkout(user, body.plan_id)
+    _analytics().track(user.user_id, "checkout_created", plan_id=body.plan_id)
+    return result
 
 
 @app.post("/api/billing/checkout/{session_id}/confirm")
 def billing_confirm(session_id: str, user: UserProfile = Depends(require_auth)):
     """Settle a checkout session. Grants Pro when the gateway reports paid."""
-    return _billing().confirm_checkout(user, session_id)
+    result = _billing().confirm_checkout(user, session_id)
+    _analytics().track(
+        user.user_id, "checkout_paid",
+        plan_id=result.get("plan_id") or "", session_id=session_id,
+    )
+    return result
 
 
 @app.get("/api/billing/subscription")
@@ -1573,6 +1618,7 @@ def alerts_list(user: UserProfile = Depends(require_pro)):
 def alerts_create(body: AlertRuleBody, user: UserProfile = Depends(require_pro)):
     """Create an alert rule (price, screen_hit or mf_nav)."""
     rule = _alerts().create_rule(user, body.model_dump())
+    _analytics().track(user.user_id, "alert_created", rule_type=rule.rule_type.value)
     return rule.model_dump(mode="json")
 
 
@@ -1634,6 +1680,7 @@ def push_subscribe(body: PushSubscribeBody, user: UserProfile = Depends(require_
         user_agent=body.user_agent,
     )
     subscription_store.upsert_push_subscription(sub)
+    _analytics().track(user.user_id, "push_opt_in")
     return {"subscribed": True}
 
 

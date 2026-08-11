@@ -22,6 +22,7 @@ def _sample_backtest() -> BacktestReport:
         window_end=datetime(2026, 8, 1),
         universe=["RELIANCE", "TCS"],
         universe_size=2,
+        universe_coverage=0.0,
         horizons=[
             HorizonStats(
                 horizon_days=30,
@@ -115,6 +116,7 @@ def test_monthly_scorecard_uses_injected_fakes(tmp_path):
     scorecard = svc.refresh()
     assert scorecard["period"] == datetime.now(timezone.utc).strftime("%Y-%m")
     assert scorecard["universe_size"] == 2
+    assert scorecard["universe_coverage"] == 0.0
     assert scorecard["horizons"][0]["horizon_days"] == 30
     assert scorecard["live_evaluated"] == 8
     assert scorecard["live_overall_hit_rate"] == 0.6

@@ -1,6 +1,7 @@
 """Service layer — business logic orchestration."""
 from screener.services.analysis_service import AnalysisService
 from screener.services.alert_service import AlertService
+from screener.services.analytics_service import AnalyticsService
 from screener.services.auth_service import AuthService
 from screener.services.backtest_service import BacktestService
 from screener.services.broker_service import BrokerService
@@ -25,6 +26,7 @@ from screener.services.verification_service import VerificationService
 __all__ = [
     "AnalysisService",
     "AlertService",
+    "AnalyticsService",
     "AuthService",
     "BacktestService",
     "BrokerService",

@@ -561,6 +561,26 @@ class SubscriptionStore:
 
     # --------------------------------------------------------- push subscripts
 
+    def _list_subscriptions(self) -> list[dict[str, Any]]:
+        """Raw subscription rows (analytics MRR aggregation)."""
+        with self._connection() as conn:
+            rows = conn.execute("SELECT * FROM subscriptions").fetchall()
+        return [dict(r) for r in rows]
+
+    def _list_checkouts(self) -> list[dict[str, Any]]:
+        """Raw checkout rows (analytics conversion aggregation)."""
+        with self._connection() as conn:
+            rows = conn.execute("SELECT * FROM checkout_sessions").fetchall()
+        return [dict(r) for r in rows]
+
+    def _distinct_push_users(self) -> int:
+        """Users with at least one push subscription (opt-in rate numerator)."""
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT user_id) AS n FROM push_subscriptions"
+            ).fetchone()
+        return int(row["n"]) if row else 0
+
     def upsert_push_subscription(self, sub: PushSubscription) -> PushSubscription:
         with self._connection() as conn:
             conn.execute(
