@@ -27,7 +27,7 @@ class RecommendationService:
         data_provider: MarketDataProvider | None = None,
     ):
         self._analysis = analysis or container.resolve(AnalysisService)
-        self._data = data_provider or container.resolve(MarketDataProvider)
+        self._data = data_provider
 
     def recommend_stocks(
         self,

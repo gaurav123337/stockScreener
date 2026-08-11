@@ -186,6 +186,17 @@ class ControlCenterService:
         if current:
             config._apply(current["values"])
             config._persist(current["values"])
+            self._refresh_providers()
+
+    @staticmethod
+    def _refresh_providers() -> None:
+        """Re-register config-driven providers so a publish applies live."""
+        from screener.bootstrap import refresh_providers
+
+        try:
+            refresh_providers()
+        except Exception:  # noqa: BLE001 — best effort; next restart self-heals
+            pass
 
     def dashboard(self) -> dict[str, Any]:
         users = [user for user in self._users.list_users() if user.user_id != "guest"]
@@ -351,9 +362,12 @@ class ControlCenterService:
                 for key, value in values.items():
                     result.append({"key": f"{section}.{key}", "section": section, "label": key.replace("_", " ").title(),
                                    "type": type(value).__name__, "default": value, "sensitive": False, "user_overridable": True})
-            else:
+            elif section == "default_universe":
                 result.append({"key": section, "section": "universe", "label": "Default Universe", "type": "list",
                                "default": values, "sensitive": False, "user_overridable": True})
+            else:
+                result.append({"key": section, "section": "providers", "label": section.replace("_", " ").title(),
+                               "type": type(values).__name__, "default": values, "sensitive": False, "user_overridable": True})
         return result
 
     def current_config(self) -> dict[str, Any]:
@@ -423,6 +437,7 @@ class ControlCenterService:
             config._apply(previous)
             config._persist(previous)
             raise
+        self._refresh_providers()
         self._store.audit(actor_id, "config.published", "global_config", str(publication["version"]), reason, {"values": patch})
         return publication
 

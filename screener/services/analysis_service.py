@@ -24,8 +24,15 @@ class AnalysisService:
         data_provider: MarketDataProvider | None = None,
         scoring_engine: ScoringEngine | None = None,
     ):
-        self._data = data_provider or container.resolve(MarketDataProvider)
+        self._data = data_provider
         self._scorer = scoring_engine or ScoringEngine()
+
+    @property
+    def _provider(self) -> MarketDataProvider:
+        """Resolve the provider lazily so config changes apply at runtime."""
+        if self._data is not None:
+            return self._data
+        return container.resolve(MarketDataProvider)
 
     def analyze(self, symbol: str, app_config: AppConfig | None = None) -> Recommendation:
         """Produce a full recommendation for a symbol.
@@ -35,18 +42,18 @@ class AnalysisService:
         """
         effective_config = app_config or config
         resolved = symbol
-        resolver = getattr(self._data, "resolve_symbol", None)
+        resolver = getattr(self._provider, "resolve_symbol", None)
         if callable(resolver):
             resolved = resolver(symbol) or symbol
 
-        history = self._data.fetch_history(
+        history = self._provider.fetch_history(
             resolved, period=effective_config.data.default_period
         )
         min_rows = effective_config.data.min_history_rows
         if history is None or history.empty or len(history) < min_rows:
             # New listings or a provider hiccup can leave <min_rows of data at
             # the default period; retry once with a longer lookback first.
-            history = self._data.fetch_history(
+            history = self._provider.fetch_history(
                 resolved, period=effective_config.data.fallback_period
             )
 
@@ -61,7 +68,7 @@ class AnalysisService:
                 error="insufficient price history",
             )
 
-        info = self._data.fetch_info(resolved)
+        info = self._provider.fetch_info(resolved)
         df = add_all(history)
         last, prev = df.iloc[-1], df.iloc[-2]
         price = float(last["Close"])
@@ -97,7 +104,7 @@ class AnalysisService:
         metrics = self._build_metrics(price, last, info)
 
         rec = Recommendation(
-            symbol=self._data.normalize_symbol(resolved),
+            symbol=self._provider.normalize_symbol(resolved),
             action=action,
             score=score,
             price=round(price, 2),

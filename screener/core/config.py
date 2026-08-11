@@ -359,6 +359,8 @@ class AppConfig(BaseSettings):
             snap["knowledge"]["allowed_extensions"]
         )
         snap["default_universe"] = list(self.default_universe)
+        snap["market_data_provider"] = self.market_data_provider
+        snap["indian_market_provider"] = self.indian_market_provider
         return snap
 
     def load_user_overrides(self) -> None:
@@ -420,6 +422,8 @@ class AppConfig(BaseSettings):
         for section in self._SECTIONS:
             model = type(getattr(self, section))
             validated[section] = model(**candidate[section]).model_dump()
+        for field in ("market_data_provider", "indian_market_provider"):
+            validated[field] = self._validate_enum(field, candidate[field])
 
         self._apply(validated)
         self._persist(self.editable_snapshot())
@@ -442,6 +446,26 @@ class AppConfig(BaseSettings):
                 setattr(self, section, model(**values[section]))
         if "default_universe" in values:
             self.default_universe = [str(s).strip().upper() for s in values["default_universe"] if str(s).strip()]
+        if "market_data_provider" in values:
+            self.market_data_provider = self._validate_enum(
+                "market_data_provider", values["market_data_provider"]
+            )
+        if "indian_market_provider" in values:
+            self.indian_market_provider = self._validate_enum(
+                "indian_market_provider", values["indian_market_provider"]
+            )
+
+    @staticmethod
+    def _validate_enum(field: str, value: Any) -> str:
+        """Validate an enum-typed config field (Literal-backed)."""
+        field_info = AppConfig.model_fields.get(field)
+        allowed = set(getattr(field_info.annotation, "__args__", ())) if field_info else set()
+        if not allowed:
+            return str(value)
+        candidate = str(value).strip().lower()
+        if candidate not in allowed:
+            raise ValueError(f"invalid {field}: {value!r} (choose from {', '.join(sorted(allowed))})")
+        return candidate
 
     def _persist(self, values: dict[str, Any]) -> None:
         self.ensure_directories()

@@ -32,9 +32,16 @@ class BacktestService:
         scoring_engine: ScoringEngine | None = None,
         report_file: str | None = None,
     ):
-        self._data = data_provider or container.resolve(MarketDataProvider)
+        self._data = data_provider
         self._engine = scoring_engine or ScoringEngine(use_registry=False)
         self._report_file = report_file or str(config.backtest_report_file)
+
+    @property
+    def _provider(self) -> MarketDataProvider:
+        """Resolve the provider lazily so config changes apply at runtime."""
+        if self._data is not None:
+            return self._data
+        return container.resolve(MarketDataProvider)
 
     # ------------------------------------------------------------------- public
 
@@ -83,7 +90,7 @@ class BacktestService:
         max_h = max(horizons)
         engine = ScoringEngine(use_registry=False, scoring_config=config.scoring)
         eval_dates = self._eval_dates(start, today, max_h)
-        benchmark = load_benchmark(self._data, config.verification.benchmark_symbol)
+        benchmark = load_benchmark(self._provider, config.verification.benchmark_symbol)
 
         samples: dict[int, list[tuple[PredictionRecord, float]]] = {h: [] for h in horizons}
         signals = 0
@@ -157,7 +164,7 @@ class BacktestService:
         out: dict[str, pd.DataFrame | None] = {}
         for symbol in symbols:
             try:
-                raw = self._data.fetch_history(symbol, period="5y")
+                raw = self._provider.fetch_history(symbol, period="5y")
             except Exception:  # noqa: BLE001
                 raw = None
             if raw is None or raw.empty:
@@ -186,7 +193,7 @@ class BacktestService:
         eval_dates = self._eval_dates(start, today, max_h)
         data = self._load_universe_data()
 
-        benchmark = load_benchmark(self._data, config.verification.benchmark_symbol)
+        benchmark = load_benchmark(self._provider, config.verification.benchmark_symbol)
 
         samples: dict[int, list[tuple[PredictionRecord, float]]] = {
             h: [] for h in horizons
@@ -281,7 +288,7 @@ class BacktestService:
         out: dict[str, pd.DataFrame | None] = {}
         for symbol in config.backtest.universe:
             try:
-                raw = self._data.fetch_history(symbol, period="5y")
+                raw = self._provider.fetch_history(symbol, period="5y")
             except Exception:  # noqa: BLE001
                 raw = None
             if raw is None or raw.empty:
@@ -296,7 +303,7 @@ class BacktestService:
 
     def _safe_info(self, symbol: str) -> dict:
         try:
-            return self._data.fetch_info(symbol) or {}
+            return self._provider.fetch_info(symbol) or {}
         except Exception:  # noqa: BLE001
             return {}
 

@@ -352,7 +352,9 @@ export interface Settings {
   knowledge: SettingsSection;
   verification: SettingsSection;
   default_universe: string[];
-  [section: string]: SettingsSection | string[];
+  market_data_provider: string;
+  indian_market_provider: string;
+  [section: string]: SettingsSection | string[] | string;
 }
 
 export type SettingsPatch = Record<string, unknown>;

@@ -40,7 +40,14 @@ class VerificationService:
         data_provider: MarketDataProvider | None = None,
     ):
         self._repo = repository or container.resolve(PredictionRepository)
-        self._data = data_provider or container.resolve(MarketDataProvider)
+        self._data = data_provider
+
+    @property
+    def _provider(self) -> MarketDataProvider:
+        """Resolve the provider lazily so config changes apply at runtime."""
+        if self._data is not None:
+            return self._data
+        return container.resolve(MarketDataProvider)
 
     # ------------------------------------------------------------------ logging
 
@@ -80,14 +87,14 @@ class VerificationService:
 
     def get_current_price(self, symbol: str) -> float | None:
         """Fetch current price for a symbol via the data provider."""
-        df = self._data.fetch_history(symbol, period="5d")
+        df = self._provider.fetch_history(symbol, period="5d")
         if df is not None and not df.empty:
             return float(df["Close"].iloc[-1])
         return None
 
     def _history_for(self, symbol: str, span_days: int) -> pd.DataFrame | None:
         period = "5y" if span_days <= 365 * 3 else "max"
-        return self._data.fetch_history(symbol, period=period)
+        return self._provider.fetch_history(symbol, period=period)
 
     # ------------------------------------------------------------ backfill seed
 
@@ -139,7 +146,7 @@ class VerificationService:
             today=today,
         )
 
-        benchmark = load_benchmark(self._data, config.verification.benchmark_symbol)
+        benchmark = load_benchmark(self._provider, config.verification.benchmark_symbol)
         # ``horizon_stats`` is both the shared helper and a model name; alias.
         compute = horizon_stats
         horizon_stats_list = [
