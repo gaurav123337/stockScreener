@@ -16,6 +16,12 @@ from typing import Any, Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from screener import universe
+
+# Bumped whenever a persisted default changes meaning; used to migrate stale
+# `data/user_config.json` files created by older versions.
+_CONFIG_VERSION = 2
+
 
 class DataConfig(BaseSettings):
     """Data fetching configuration."""
@@ -26,6 +32,16 @@ class DataConfig(BaseSettings):
     retry_attempts: int = 2
     retry_pause_seconds: float = 1.0
     max_workers: int = 8
+    # Minimum rows of OHLCV history required before a symbol is analysable.
+    min_history_rows: int = 60
+    # Long-period fallback used when a symbol has insufficient 1y history.
+    fallback_period: str = "2y"
+    # Fundamentals change slowly; cache them this long to avoid re-scraping.
+    fundamentals_cache_ttl_seconds: int = 86_400
+    # How long fetched OHLCV history is reused before re-fetching. This is the
+    # rate-limit layer: repeated scans of the same universe hit the cache, not
+    # the price provider.
+    history_cache_ttl_seconds: int = 3600
 
 
 class ScoringConfig(BaseSettings):
@@ -70,6 +86,27 @@ class VerificationConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SCREENER_VERIFY_")
 
     horizon_days: int = 30
+    # Every logged signal is evaluated over each of these horizons.
+    horizons: list[int] = Field(default_factory=lambda: [30, 90, 365])
+    # Benchmark index used for "vs market" comparison.
+    benchmark_symbol: str = "^NSEI"
+    # Minimum sample size before a hit-rate is considered meaningful/public.
+    min_sample: int = 20
+
+
+class BacktestConfig(BaseSettings):
+    """Walk-forward backtest replay of the signal engine."""
+    model_config = SettingsConfigDict(env_prefix="SCREENER_BACKTEST_")
+
+    # Signals are generated on these dates and evaluated over each horizon.
+    start_date: str = "2024-01-01"
+    sample_every_days: int = 21
+    max_horizon_days: int = 365
+    # Published report freshness (how long /api/backtest may serve cached data).
+    cache_ttl_seconds: int = 43_200
+    # The published track record replays the full screening universe (Nifty 500)
+    # so the dated hit-rate covers the same names the app recommends on.
+    universe: list[str] = Field(default_factory=lambda: list(universe.default_universe()))
 
 
 class IndianApiConfig(BaseSettings):
@@ -95,6 +132,89 @@ class IndianApiConfig(BaseSettings):
         return value
 
 
+class MutualFundConfig(BaseSettings):
+    """Phase-3 mutual-fund data (AMFI NAV feed, mirrored by mfapi.in)."""
+    model_config = SettingsConfigDict(env_prefix="SCREENER_MF_")
+
+    enabled: bool = True
+    # Free mirror of the official AMFI NAV data (scheme master + daily NAVs
+    # + historical NAV series + SEBI scheme category). AMFI's own endpoint is
+    # frequently unreachable from datacenter IPs, so the mirror is the
+    # reliable free source; the data itself is the AMFI NAV file.
+    base_url: str = "https://api.mfapi.in"
+    timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    # How long the cached scheme universe / scheme details stay fresh.
+    # Daily refresh (AMFI publishes NAV once a day) with visible timestamps.
+    cache_ttl_seconds: int = Field(default=86_400, ge=300, le=604_800)
+    max_workers: int = Field(default=8, ge=1, le=32)
+    # Universe caps so a first build stays fast and polite to the feed.
+    universe_max: int = Field(default=220, ge=20, le=800)
+    per_category_max: int = Field(default=40, ge=5, le=200)
+    per_amc_per_category: int = Field(default=6, ge=1, le=50)
+    # Risk-free rate used for Sharpe/Sortino (approx 10-yr g-sec yield).
+    risk_free_rate: float = Field(default=0.065, ge=0, le=0.20)
+
+
+class BillingConfig(BaseSettings):
+    """Freemium / Pro subscription configuration (Phase 4)."""
+    model_config = SettingsConfigDict(env_prefix="SCREENER_BILLING_")
+
+    # The active payment gateway: "sandbox" (default) or a production name.
+    gateway: str = "sandbox"
+    # Free-tier limits (churn-safe: generous but gated so Pro has a reason).
+    free_saved_screens: int = 1
+    pro_saved_screens: int = 50
+    # Trial length in days for the yearly plan (0 = no trial).
+    trial_days: int = 7
+    # Annualized Pro pricing anchored to screener.in Premium / Tickertape Pro.
+    pro_monthly_inr: float = 199.0
+    pro_monthly_usd: float = 3.0
+    pro_yearly_inr: float = 1999.0
+    pro_yearly_usd: float = 24.0
+
+
+class PushConfig(BaseSettings):
+    """PWA web-push (VAPID) configuration (Phase 5).
+
+    In the preview environment no real push provider is contacted — alert and
+    notification delivery is best-effort through the outbox. These keys are
+    used by a real web-push adapter when the app runs with a provider.
+    """
+    model_config = SettingsConfigDict(env_prefix="SCREENER_PUSH_")
+
+    # Placeholder VAPID keys (dev). Replace with real generated keys for prod.
+    vapid_public_key: str = "BDHm0Xk9A1VHm0Xk9A1VHm0Xk9A1VHm0Xk9A1VHm0Xk9A1V"
+    vapid_private_key: str = "dev-private-key-replace-me"
+    vapid_subject: str = "mailto:support@stockscreener.in"
+    # A real provider (e.g. "webpush") can be configured here later.
+    provider: str = "outbox"
+
+
+class ComplianceConfig(BaseSettings):
+    """Trust / compliance framing surfaced alongside every recommendation.
+
+    Kept as configuration (not hardcoded UI text) so the product owner can
+    tune the wording without a deploy. This is deliberate — the disclaimer is
+    part of the product's trust surface, not an afterthought.
+    """
+    model_config = SettingsConfigDict(env_prefix="SCREENER_COMPLIANCE_")
+
+    # Leading statement framing the tool as education, not advice.
+    educational_note: str = (
+        "Educational tool for research, not SEBI-registered investment advice. "
+        "Nothing here is a recommendation to buy or sell any security."
+    )
+    # Shown prominently whenever scores / actions are displayed.
+    disclaimer: str = (
+        "Scores are generated by a rules-based engine and are not a guarantee "
+        "of future returns. Do your own research before investing."
+    )
+    # Attribution for the underlying data sources.
+    data_source_label: str = (
+        "Data: Yahoo Finance (prices & fundamentals) + NSE (company metadata)."
+    )
+
+
 class AppConfig(BaseSettings):
     """Root application configuration."""
     model_config = SettingsConfigDict(env_prefix="SCREENER_")
@@ -112,25 +232,26 @@ class AppConfig(BaseSettings):
     risk: RiskConfig = Field(default_factory=RiskConfig)
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
     verification: VerificationConfig = Field(default_factory=VerificationConfig)
+    backtest: BacktestConfig = Field(default_factory=BacktestConfig)
+    compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
+    billing: BillingConfig = Field(default_factory=BillingConfig)
+    push: PushConfig = Field(default_factory=PushConfig)
     indian_api: IndianApiConfig = Field(default_factory=IndianApiConfig)
+    mutual_fund: MutualFundConfig = Field(default_factory=MutualFundConfig)
     market_data_provider: Literal["yahoo", "indian_api", "hybrid"] = "yahoo"
+
+    # Which adapter backs the Indian market workspace. Both providers conform
+    # to the same gateway contract, so this is the only switch that changes.
+    indian_market_provider: Literal["indian_api", "yahoo"] = "indian_api"
 
     # Environment
     environment: Literal["development", "production", "testing"] = "development"
     debug: bool = False
 
-    # Default symbol universe
+    # Default symbol universe — Nifty 500 (falls back to Nifty 50 if the
+    # vendored NSE constituents file is unavailable).
     default_universe: list[str] = Field(default_factory=lambda: [
-        "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK",
-        "BAJAJ-AUTO", "BAJAJFINSV", "BAJFINANCE", "BEL", "BHARTIARTL",
-        "BPCL", "BRITANNIA", "CIPLA", "COALINDIA", "DRREDDY",
-        "EICHERMOT", "GRASIM", "HCLTECH", "HDFCBANK", "HDFCLIFE",
-        "HEROMOTOCO", "HINDALCO", "HINDUNILVR", "ICICIBANK", "INDUSINDBK",
-        "INFY", "ITC", "JSWSTEEL", "KOTAKBANK", "LT",
-        "M&M", "MARUTI", "NESTLEIND", "NTPC", "ONGC",
-        "POWERGRID", "RELIANCE", "SBILIFE", "SBIN", "SHRIRAMFIN",
-        "SUNPHARMA", "TATACONSUM", "TATAMOTORS", "TATASTEEL", "TCS",
-        "TECHM", "TITAN", "TRENT", "ULTRACEMCO", "WIPRO",
+        *universe.default_universe(),
     ])
 
     @field_validator("data_dir", mode="before")
@@ -181,15 +302,47 @@ class AppConfig(BaseSettings):
     def user_config_file(self) -> Path:
         return self.data_dir / "user_config.json"
 
+    @property
+    def backtest_report_file(self) -> Path:
+        return self.data_dir / "backtest_report.json"
+
+    @property
+    def scorecard_cache_file(self) -> Path:
+        return self.data_dir / "scorecard.json"
+
+    @property
+    def changelog_file(self) -> Path:
+        return self.data_dir / "changelog.json"
+
+    # ---- Phase-3 mutual-fund cache paths ----
+    @property
+    def mf_dir(self) -> Path:
+        return self.data_dir / "mf"
+
+    @property
+    def mf_master_file(self) -> Path:
+        return self.mf_dir / "master.json"
+
+    @property
+    def mf_universe_file(self) -> Path:
+        return self.mf_dir / "universe.json"
+
+    @property
+    def mf_scheme_dir(self) -> Path:
+        return self.mf_dir / "schemes"
+
+    def mf_scheme_file(self, scheme_code: int) -> Path:
+        return self.mf_scheme_dir / f"{scheme_code}.json"
+
     def ensure_directories(self) -> None:
         """Create all required directories if they don't exist."""
-        for d in (self.data_dir, self.knowledge_dir, self.knowledge_graph_dir):
+        for d in (self.data_dir, self.knowledge_dir, self.knowledge_graph_dir, self.mf_dir, self.mf_scheme_dir):
             d.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------ #
     # Dashboard-editable settings (get / update / reset)
     # ------------------------------------------------------------------ #
-    _SECTIONS = ("data", "scoring", "risk", "knowledge", "verification")
+    _SECTIONS = ("data", "scoring", "risk", "knowledge", "verification", "compliance")
 
     @classmethod
     def _defaults(cls) -> dict[str, Any]:
@@ -206,6 +359,8 @@ class AppConfig(BaseSettings):
             snap["knowledge"]["allowed_extensions"]
         )
         snap["default_universe"] = list(self.default_universe)
+        snap["market_data_provider"] = self.market_data_provider
+        snap["indian_market_provider"] = self.indian_market_provider
         return snap
 
     def load_user_overrides(self) -> None:
@@ -214,9 +369,28 @@ class AppConfig(BaseSettings):
             if self.user_config_file.exists():
                 saved = json.loads(self.user_config_file.read_text(encoding="utf-8"))
                 if isinstance(saved, dict) and saved:
+                    self._migrate(saved)
                     self._apply(saved)
+                    # Persist the migrated state so the fix is applied once.
+                    self._persist(saved)
         except Exception:
             pass  # corrupt file -> keep booting with defaults
+
+    def _migrate(self, saved: dict[str, Any]) -> None:
+        """Upgrade stale persisted settings to current defaults.
+
+        v2: the default screening universe grew from Nifty 50 to Nifty 500.
+        A persisted ``default_universe`` that still equals the legacy Nifty-50
+        list is almost certainly a stale snapshot, not a deliberate choice —
+        replace it with the current default. Custom universes are preserved.
+        """
+        if int(saved.get("config_version", 1)) < 2:
+            existing = saved.get("default_universe")
+            if isinstance(existing, list):
+                normalized = [str(s).strip().upper() for s in existing if str(s).strip()]
+                if sorted(normalized) == sorted(universe.NIFTY50):
+                    saved["default_universe"] = list(universe.default_universe())
+        saved["config_version"] = _CONFIG_VERSION
 
     def update_settings(self, patch: dict[str, Any]) -> dict[str, Any]:
         """Validate & apply a partial settings patch, then persist it.
@@ -248,6 +422,8 @@ class AppConfig(BaseSettings):
         for section in self._SECTIONS:
             model = type(getattr(self, section))
             validated[section] = model(**candidate[section]).model_dump()
+        for field in ("market_data_provider", "indian_market_provider"):
+            validated[field] = self._validate_enum(field, candidate[field])
 
         self._apply(validated)
         self._persist(self.editable_snapshot())
@@ -270,11 +446,33 @@ class AppConfig(BaseSettings):
                 setattr(self, section, model(**values[section]))
         if "default_universe" in values:
             self.default_universe = [str(s).strip().upper() for s in values["default_universe"] if str(s).strip()]
+        if "market_data_provider" in values:
+            self.market_data_provider = self._validate_enum(
+                "market_data_provider", values["market_data_provider"]
+            )
+        if "indian_market_provider" in values:
+            self.indian_market_provider = self._validate_enum(
+                "indian_market_provider", values["indian_market_provider"]
+            )
+
+    @staticmethod
+    def _validate_enum(field: str, value: Any) -> str:
+        """Validate an enum-typed config field (Literal-backed)."""
+        field_info = AppConfig.model_fields.get(field)
+        allowed = set(getattr(field_info.annotation, "__args__", ())) if field_info else set()
+        if not allowed:
+            return str(value)
+        candidate = str(value).strip().lower()
+        if candidate not in allowed:
+            raise ValueError(f"invalid {field}: {value!r} (choose from {', '.join(sorted(allowed))})")
+        return candidate
 
     def _persist(self, values: dict[str, Any]) -> None:
         self.ensure_directories()
+        out = dict(values)
+        out["config_version"] = _CONFIG_VERSION
         self.user_config_file.write_text(
-            json.dumps(values, indent=2), encoding="utf-8"
+            json.dumps(out, indent=2), encoding="utf-8"
         )
 
 

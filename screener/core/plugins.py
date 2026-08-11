@@ -38,11 +38,15 @@ class PluginRegistry:
         return None
 
     def list_filters(self) -> list[dict[str, str]]:
-        """List all registered filters."""
-        return [
-            {"name": f.name, "description": f.description}
-            for f in self._filters.values()
-        ]
+        """List all registered filters (guided presets flagged for the UI)."""
+        out: list[dict[str, str]] = []
+        for f in self._filters.values():
+            item: dict[str, str] = {"name": f.name, "description": f.description}
+            guided = getattr(f, "guided", False)
+            if guided:
+                item["guided"] = "true"
+            out.append(item)
+        return out
 
     # ---- Scorers ----
     def register_scorer(self, scorer: ScoringStrategy) -> None:

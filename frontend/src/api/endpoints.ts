@@ -3,17 +3,41 @@ import type {
   AdminFeedbackDetail,
   AdminOverview,
   AdminUser,
+  AlertEvaluation,
+  AlertRule,
+  AlertRuleType,
+  AnalyticsOverview,
+  Article,
+  ArticleSummary,
   AuditEvent,
   AuthToken,
+  BacktestReport,
+  BillingPlan,
   BrokerConnectRequest,
   BrokerInstructionsResponse,
+  BrokerLink,
   BrokerStatusResponse,
+  ChangelogEntry,
+  CheckBeforeBuy,
+  CheckoutSession,
+  ComplianceResponse,
   ConfigDiff,
   ConfigPublication,
   ConfigRegistryItem,
+  Entitlements,
+  FeedbackOutcomes,
   FeedbackReceipt,
   FeedbackRequest,
+  FeedbackSuggestions,
   FiltersResponse,
+  FiredAlert,
+  FundBasket,
+  FundCategory,
+  FundComparison,
+  FundDetail,
+  FundScreenerResult,
+  FundStatus,
+  GlossaryResponse,
   HoldingsResponse,
   IndianEnvelope,
   IndianHistory,
@@ -21,15 +45,26 @@ import type {
   IndianSearchResult,
   IndianStats,
   IndianStock,
+  InvestmentPlan,
   KnowledgeResponse,
   LearnResult,
+  MonthlyScorecard,
   Paginated,
+  PortfolioAnalytics,
+  RiskProfile,
+  RiskProfileResponse,
+  RiskQuestion,
+  SavedScreen,
   ScanRequest,
   ScanResponse,
   ScanRow,
   SearchResponse,
   Settings,
   SettingsPatch,
+  SipResult,
+  StrategyBacktest,
+  SubscriptionInfo,
+  SuccessStory,
   UserProfile,
   VerifyResponse,
   WatchlistResponse,
@@ -63,6 +98,7 @@ export const api = {
 
   /* Product owner control center */
   adminOverview: () => http.get<AdminOverview>("/api/admin/overview"),
+  adminAnalytics: () => http.get<AnalyticsOverview>("/api/admin/analytics"),
   adminUsers: (query = "") =>
     http.get<Paginated<AdminUser>>(`/api/admin/users${query ? `?${query}` : ""}`),
   adminUser: (userId: string) =>
@@ -124,6 +160,22 @@ export const api = {
   filters: () => http.get<FiltersResponse>("/api/filters"),
   search: (q: string) => http.get<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`),
   verify: () => http.get<VerifyResponse>("/api/verify"),
+  backtest: () => http.get<BacktestReport>("/api/backtest"),
+  backtestRun: () => http.post<BacktestReport>("/api/backtest/run"),
+
+  /* Beginner-first UX: onboarding, risk profile, plan, glossary */
+  onboardingQuestions: () => http.get<{ questions: RiskQuestion[] }>("/api/onboarding/questions"),
+  getRiskProfile: () => http.get<RiskProfileResponse>("/api/risk-profile"),
+  saveRiskProfile: (answers: Record<string, string>) =>
+    http.post<RiskProfile>("/api/risk-profile", { answers }),
+  buildPlan: (body: {
+    risk_level: string;
+    monthly_amount: number;
+    horizon_years: number;
+    goal: string;
+  }) => http.post<InvestmentPlan>("/api/plan", body),
+  glossary: () => http.get<GlossaryResponse>("/api/glossary"),
+  compliance: () => http.get<ComplianceResponse>("/api/compliance"),
 
   /* Settings */
   settings: () => http.get<Settings>("/api/settings"),
@@ -187,4 +239,140 @@ export const api = {
       `/api/indian-market/stock/${encodeURIComponent(stockId)}/forecasts${query.size ? `?${query}` : ""}`,
     );
   },
+
+  /* Mutual funds (Phase 3 — AMFI NAV feed) */
+  mutualFundStatus: () => http.get<FundStatus>("/api/mutual-funds/status"),
+  mutualFundCategories: () => http.get<{ categories: { value: FundCategory; label: string }[] }>(
+    "/api/mutual-funds/categories",
+  ),
+  mutualFundScreener: (params: Record<string, string | number | boolean | undefined>) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== "") query.set(key, String(value));
+    }
+    return http.get<FundScreenerResult>(
+      `/api/mutual-funds/screener${query.size ? `?${query}` : ""}`,
+    );
+  },
+  mutualFundDetail: (schemeCode: number) =>
+    http.get<FundDetail>(`/api/mutual-funds/${schemeCode}`),
+  mutualFundRecommend: (body: {
+    risk_level: string;
+    goal: string;
+    monthly_amount: number;
+    horizon_years: number;
+  }) => http.post<FundBasket>("/api/mutual-funds/recommend", body),
+  mutualFundCompare: (codes: number[]) =>
+    http.post<FundComparison>("/api/mutual-funds/compare", { codes }),
+  mutualFundSip: (body: {
+    mode: string;
+    monthly_amount?: number;
+    lumpsum_amount?: number;
+    years: number;
+    assumed_return_pct?: number;
+    step_up_pct?: number;
+  }) => http.post<SipResult>("/api/mutual-funds/sip", body),
+
+  /* Pro / billing (Phase 4) */
+  billingPlans: () => http.get<{ plans: BillingPlan[] }>("/api/billing/plans"),
+  billingEntitlements: () => http.get<Entitlements>("/api/billing/entitlements"),
+  billingSubscription: () => http.get<SubscriptionInfo>("/api/billing/subscription"),
+  createCheckout: (planId: string) =>
+    http.post<CheckoutSession>("/api/billing/checkout", { plan_id: planId }),
+  confirmCheckout: (sessionId: string) =>
+    http.post<{ status: string; tier: string; plan_id: string; renews_at: string; message: string }>(
+      `/api/billing/checkout/${encodeURIComponent(sessionId)}/confirm`,
+    ),
+  cancelSubscription: () => http.post<SubscriptionInfo>("/api/billing/cancel"),
+
+  /* Pro: saved screens + alerts */
+  listSavedScreens: () => http.get<{ screens: SavedScreen[] }>("/api/pro/screens"),
+  saveScreen: (body: {
+    name: string;
+    filter_expr?: string;
+    sort_by?: string;
+    sort_dir?: string;
+    limit?: number;
+    alert_enabled?: boolean;
+    alert_email?: string | null;
+  }) => http.post<SavedScreen>("/api/pro/screens", body),
+  deleteScreen: (screenId: string) =>
+    http.delete<{ deleted: boolean; screen_id: string }>(
+      `/api/pro/screens/${encodeURIComponent(screenId)}`,
+    ),
+  evaluateScreen: (screenId: string) =>
+    http.post<AlertEvaluation>(`/api/pro/screens/${encodeURIComponent(screenId)}/evaluate`),
+
+  /* Pro: portfolio analytics + strategy backtest */
+  portfolioAnalytics: (holdings: Record<string, unknown>[]) =>
+    http.post<PortfolioAnalytics>("/api/pro/portfolio/analytics", { holdings }),
+  strategyBacktest: (body: { strategy: string; symbols?: string[] }) =>
+    http.post<StrategyBacktest>("/api/pro/strategy/backtest", body),
+
+  /* Learn moat (Phase 5) */
+  learnList: (q = "", category?: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (category) params.set("category", category);
+    const query = params.toString();
+    return http.get<{ articles: ArticleSummary[]; count: number }>(
+      `/api/learn${query ? `?${query}` : ""}`,
+    );
+  },
+  learnDetail: (slug: string) => http.get<Article>(`/api/learn/${encodeURIComponent(slug)}`),
+
+  /* Proof layer (Phase 5) */
+  monthlyScorecard: () => http.get<MonthlyScorecard>("/api/scorecard"),
+  successStories: () => http.get<{ stories: SuccessStory[] }>("/api/stories"),
+
+  /* Alerts (Phase 5) */
+  listAlerts: () => http.get<{ rules: AlertRule[] }>("/api/alerts"),
+  createAlert: (body: {
+    rule_type: AlertRuleType;
+    name?: string;
+    symbol?: string;
+    scheme_code?: string;
+    direction?: "above" | "below";
+    trigger_value: number;
+    screen_id?: string;
+    enabled?: boolean;
+  }) => http.post<AlertRule>("/api/alerts", body),
+  deleteAlert: (alertId: string) =>
+    http.delete<{ deleted: boolean }>(`/api/alerts/${encodeURIComponent(alertId)}`),
+  resetAlert: (alertId: string) =>
+    http.post<{ reset: boolean }>(`/api/alerts/${encodeURIComponent(alertId)}/reset`),
+  evaluateAlerts: (symbols: string[] = []) =>
+    http.post<{ fired: FiredAlert[] }>("/api/alerts/evaluate", { symbols }),
+
+  /* PWA push (Phase 5) */
+  pushPublicKey: () => http.get<{ public_key: string }>("/api/push/public-key"),
+  pushSubscribe: (body: {
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    user_agent: string;
+  }) => http.post<{ subscribed: boolean }>("/api/push/subscribe", body),
+  pushUnsubscribe: (endpoint: string) =>
+    http.delete<{ unsubscribed: boolean }>(`/api/push/subscribe?endpoint=${encodeURIComponent(endpoint)}`),
+
+  /* Check-before-buy (Phase 5) */
+  checkBrokers: () => http.get<{ brokers: BrokerLink[] }>("/api/check/brokers"),
+  checkDeepLink: (brokerId: string, symbol: string) =>
+    http.get<{ broker: string; symbol: string; web: string; app: string }>(
+      `/api/check/deep-link/${encodeURIComponent(brokerId)}?symbol=${encodeURIComponent(symbol)}`,
+    ),
+  checkBeforeBuy: (symbol: string) =>
+    http.get<CheckBeforeBuy>(`/api/check/${encodeURIComponent(symbol)}`),
+
+  /* Feedback loop (Phase 5) */
+  feedbackOutcomes: () => http.get<FeedbackOutcomes>("/api/feedback-loop/outcomes"),
+  feedbackSuggestions: () => http.get<FeedbackSuggestions>("/api/feedback-loop/suggestions"),
+  feedbackChangelog: () => http.get<{ entries: ChangelogEntry[] }>("/api/feedback-loop/changelog"),
+  feedbackPublish: (body: {
+    version: string;
+    date?: string;
+    title: string;
+    summary: string;
+    weight_changes?: Record<string, Record<string, unknown>>;
+  }) => http.post<ChangelogEntry>("/api/feedback-loop/publish", body),
 };

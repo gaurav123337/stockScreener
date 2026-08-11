@@ -9,7 +9,7 @@ export const SECTION_META: ReadonlyArray<readonly [string, string, string]> = [
   ["risk", "Risk & Trade Levels", "Stop-loss / target calculation."],
   ["data", "Data Fetching", "History window and reliability for market data."],
   ["knowledge", "Knowledge Base", "How training documents are ingested."],
-  ["verification", "Verification", "How prediction accuracy is measured."],
+  ["verification", "Verification", "How signal hit-rates are measured."],
 ];
 
 const LABELS: Record<string, string> = {
@@ -37,7 +37,7 @@ const LABELS: Record<string, string> = {
   min_rule_length: "Min rule length",
   max_rule_length: "Max rule length",
   allowed_extensions: "Allowed file types",
-  horizon_days: "Verify after (days)",
+  horizon_days: "Evaluate after (days)",
   default_universe: "Default scan universe (symbols)",
 };
 

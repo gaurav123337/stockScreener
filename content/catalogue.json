@@ -1,0 +1,252 @@
+[
+  {
+    "slug": "what-is-pe-ratio",
+    "title": "What is the P/E ratio, and when is it actually low?",
+    "tagline": "The P/E ratio is the most-quoted valuation metric in India. Here is what it really tells you — and the three mistakes beginners make with it.",
+    "category": "Concepts",
+    "reading_minutes": 5,
+    "seo_meta": {
+      "description": "Learn what the P/E ratio measures, how to read it for Indian stocks, what a reasonable P/E is, and the common mistakes — with a worked example."
+    },
+    "sections": [
+      {
+        "heading": "The one-sentence version",
+        "body": "The P/E ratio (price-to-earnings) tells you how much the market is paying for every \u20b91 of profit the company earns. If a stock trades at \u20b92,000 and the company earns \u20b9100 per share, its P/E is 20 \u2014 you are paying 20 years of current earnings for one share.\n\nThat single number blends two very different questions: \u201cis this company earning well?\u201d and \u201cis this price reasonable?\u201d P/E only answers the second question, and only relative to the first.",
+        "bullets": [
+          "P/E = Price per share \u00f7 Earnings per share (EPS).",
+          "A P/E of 15 means you pay \u20b915 for every \u20b91 of annual profit.",
+          "It is a snapshot, not a verdict \u2014 it says nothing about future growth by itself."
+        ]
+      },
+      {
+        "heading": "Why low P/E does not automatically mean \u2018cheap\u2019",
+        "body": "Beginners assume low P/E = cheap and high P/E = expensive. Reality is messier, because P/E compares a price to today's earnings, and today's earnings may be temporarily inflated or depressed.\n\nA cyclical company (cement, steel, autos) can show a high P/E near the bottom of its cycle \u2014 earnings collapsed while the stock fell less \u2014 and a low P/E near the top of its cycle, when earnings are booming. Buying on P/E alone in a cyclical can mean buying exactly at the wrong time.\n\nThat is why analysts compare a stock's P/E to three things, not to an absolute number: its own historical range, its industry peers, and its growth rate (the PEG ratio).",
+        "bullets": [
+          "Compare P/E to the same stock's 5-year history, not to \u2018the market\u2019.",
+          "Compare P/E to direct peers in the same sector \u2014 banks and IT companies are not comparable.",
+          "Growth changes everything: a P/E of 40 is cheap for a company growing 30% a year."
+        ]
+      },
+      {
+        "heading": "A worked example",
+        "body": "Suppose two companies both earn \u20b91,000 crore. Company A grows 8% a year and trades at a P/E of 12. Company B grows 25% a year and trades at a P/E of 35.\n\nWhich is cheaper? Company B costs 35\u00d7 earnings today, but if it keeps growing, its P/E on next year's earnings is about 28, and the year after about 22. Company A's P/E barely falls as its growth crawls. The PEG ratio captures this: A is 12 \u00f7 8 \u2248 1.5, B is 35 \u00f7 25 = 1.4 \u2014 on growth-adjusted terms B is the better deal.",
+        "bullets": [
+          "PEG = P/E \u00f7 expected earnings growth \u2014 a PEG below 1 often signals the growth is not yet priced in.",
+          "Always ask \u2018why is the P/E low?\u2019 \u2014 low can mean cheap or broken.",
+          "Watch out for one-time profits inflating EPS: a low P/E after an asset sale is not the same as a low P/E from operations."
+        ]
+      },
+      {
+        "heading": "What a sensible P/E looks like in India",
+        "body": "There is no universal \u2018fair\u2019 number. The Nifty 50 has historically traded between roughly 15 and 25 times trailing earnings, with bursts above that in bull markets. Within that, quality compounders \u2014 steady ROE, low debt, predictable demand \u2014 routinely command higher multiples than their growth alone would justify, and that premium can persist for years.\n\nA P/E far below the sector and the stock's own history deserves attention: either the market is worried about something the fundamentals have not yet shown, or the stock is genuinely out of favour. Look for the reason before assuming the market is wrong.",
+        "bullets": [
+          "Trailing P/E uses the last four reported quarters; forward P/E uses forecasts \u2014 never mix the two.",
+          "A stock can be a value trap: cheap P/E + falling earnings = the P/E stays low forever.",
+          "This screener shows P/E alongside ROE, debt-to-equity, and a growth-adjusted view so you never judge a stock on one number."
+        ]
+      }
+    ],
+    "related_slugs": ["index-fund-vs-etf", "elss-tax-saving", "signal-score-explained"],
+    "updated_at": "2026-08-01"
+  },
+  {
+    "slug": "index-fund-vs-etf",
+    "title": "Index fund vs ETF: which should you pick?",
+    "tagline": "Both track the same Nifty 50. The difference is plumbing \u2014 how you buy and sell \u2014 and for most investors it decides the answer.",
+    "category": "Funds",
+    "reading_minutes": 5,
+    "seo_meta": {
+      "description": "Index funds and ETFs both track indices like the Nifty 50, but differ in how you trade them. A practical India-focused comparison covering costs, convenience and which to choose."
+    },
+    "sections": [
+      {
+        "heading": "Same engine, different cockpit",
+        "body": "An index fund and an ETF tracking the same index hold essentially the same stocks in the same proportions. Over a year their returns differ only by fees and tracking error. The real difference is how you transact.\n\nAn index fund is bought from the fund house at the day's NAV \u2014 one price, set after market close. An ETF is a listed security: you buy and sell it on the exchange at a live price throughout the day, like a stock, with a broker and (usually) a Demat account.",
+        "bullets": [
+          "Index fund: one NAV per day, no Demat needed, buy any amount (often \u20b9500 minimum).",
+          "ETF: live intraday price, needs a Demat account, bought in whole units.",
+          "Both give you the index's returns minus expenses \u2014 the difference is convenience vs. flexibility."
+        ]
+      },
+      {
+        "heading": "The cost difference (in basis points)",
+        "body": "Fees are small but permanent. A 0.10% annual difference over 20 years on \u20b910 lakh is roughly \u20b92\u20133 lakh of extra wealth \u2014 because you pay fees on the whole growing balance every single year.\n\nIn India, index funds typically charge 0.10\u20130.30%, and ETFs often 0.05\u20130.20%. ETFs are marginally cheaper, but the gap is usually smaller than the practical costs of buying an ETF: brokerage, bid-ask spread, and the effort of placing orders. For small SIP-style amounts, the index fund's convenience often outweighs the tiny fee edge.",
+        "bullets": [
+          "A 0.10% fee difference compounds for decades \u2014 it is not trivial.",
+          "ETF spreads and brokerage eat into the fee advantage for small orders.",
+          "Check the expense ratio in the fund's factsheet, and the tracking error, before comparing."
+        ]
+      },
+      {
+        "heading": "When to prefer each",
+        "body": "Choose an index fund if you invest monthly (SIP), in small amounts, through an app, and you do not have or want a Demat account \u2014 you get index returns with the least friction. Choose an ETF if you want to trade intraday, buy in bulk at a live price, or plan to move between many holdings and want exchange liquidity.\n\nThere is one warning for ETF beginners: you can accidentally pay more than the fund is worth. If an ETF trades at a premium to its NAV, you are overpaying for the index. Liquid Nifty-50 ETFs track NAV tightly; thinly traded thematic ETFs often do not.",
+        "bullets": [
+          "SIP investors \u2192 index funds (frictionless, no Demat needed).",
+          "Lump-sum, larger, trading-minded investors \u2192 ETFs at market price.",
+          "Check the ETF's premium/discount to NAV before buying \u2014 not just its price."
+        ]
+      },
+      {
+        "heading": "The one rule that matters more than the choice",
+        "body": "The debate between index fund and ETF is a rounding error compared to the decision of whether to be invested at all. A 0.15% fee difference will never outweigh staying invested through drawdowns, or the cost of missing the best 20 market days \u2014 which historically account for most of the index's returns.\n\nPick the wrapper that removes barriers for you, set up an automatic investment, and spend your research energy on asset allocation rather than re-litigating fund structure.",
+        "bullets": [
+          "Asset allocation and staying invested dominate costs over decades.",
+          "Avoid switching wrappers repeatedly \u2014 each switch adds cost and timing risk.",
+          "This app's fund screener shows expense ratio, AUM and returns side by side so the wrapper comparison is honest."
+        ]
+      }
+    ],
+    "related_slugs": ["what-is-pe-ratio", "elss-tax-saving"],
+    "updated_at": "2026-08-01"
+  },
+  {
+    "slug": "elss-tax-saving",
+    "title": "ELSS and the 80C section: how tax-saving equity funds work",
+    "tagline": "ELSS funds are the only equity mutual fund that counts toward the \u20b91.5 lakh Section 80C deduction. Here is how they work, the lock-in, and when they make sense.",
+    "category": "Taxation",
+    "reading_minutes": 5,
+    "seo_meta": {
+      "description": "A beginner's guide to ELSS funds: Section 80C deduction up to \u20b91.5 lakh, the 3-year lock-in, returns, exit load and how they compare with PPF, FD and other 80C options."
+    },
+    "sections": [
+      {
+        "heading": "What ELSS actually is",
+        "body": "ELSS stands for Equity Linked Savings Scheme \u2014 a diversified equity mutual fund that is also eligible for the Section 80C tax deduction, up to \u20b91.5 lakh per financial year. It is the only equity fund with 80C status, which makes it popular with anyone trying to reduce taxable income while staying in equities.\n\nThe deduction reduces your taxable income directly. If you are in the 30% slab, a \u20b91.5 lakh ELSS investment can save roughly \u20b945,000 in tax \u2014 assuming the old tax regime.",
+        "bullets": [
+          "80C deduction of up to \u20b91.5 lakh per financial year.",
+          "The only equity mutual fund eligible under 80C.",
+          "Tax saved = 80C amount \u00d7 your slab rate (old regime)."
+        ]
+      },
+      {
+        "heading": "The 3-year lock-in is the catch",
+        "body": "ELSS has a 3-year lock-in per SIP instalment. Every contribution is locked for three years from the date of that particular purchase \u2014 so a monthly SIP locks each instalment separately. You cannot redeem a unit before its 3 years are up.\n\nThree years is short enough to be tolerable, but it is not a recommendation to hold for exactly three years. Equity markets have 3-year windows that end lower than they started. ELSS is best treated as a long-horizon investment where the tax benefit is a bonus \u2014 not as a way to make a 3-year target.",
+        "bullets": [
+          "Lock-in applies per instalment: each SIP purchase has its own 3-year clock.",
+          "No exit load after the lock-in on most ELSS funds.",
+          "A 3-year horizon is not guaranteed to be profitable \u2014 it is merely when redemption is allowed."
+        ]
+      },
+      {
+        "heading": "How it compares with other 80C options",
+        "body": "Within 80C you can choose PPF (7.1% fixed, 15-year lock-in, tax-free interest), a 5-year bank FD (fixed return, taxed), NSC, life insurance premiums, or ELSS (market return, 3-year lock-in, capital gains taxed).\n\nThe trade-off is risk vs. tax efficiency. PPF gives certainty; ELSS gives growth potential with real volatility. A common approach for a young investor with a long goal is to use ELSS for the equity sleeve of 80C and PPF for the safety sleeve. The point of 80C is not to pick one \u2014 it is to fit the pieces to your risk profile.",
+        "bullets": [
+          "PPF: fixed ~7.1%, 15-year lock-in, interest tax-free.",
+          "ELSS: market-linked, 3-year lock-in, LTCG taxed above \u20b91 lakh.",
+          "Blend 80C across instruments to match your actual risk profile."
+        ]
+      },
+      {
+        "heading": "Where ELSS fits in this app",
+        "body": "ELSS funds are a proper subset of the equity fund universe, so the same screens apply: check expense ratio, fund age, manager tenure and rolling returns before choosing. A high-cost ELSS that merely tracks the market is worse than a cheap diversified equity fund plus a PPF contribution.\n\nThe fund screener marks ELSS schemes with a tax-saving badge, and the SIP calculator can show you the post-tax picture for a systematic plan \u2014 so the decision is made on numbers, not on the tax label.",
+        "bullets": [
+          "Tax benefit is per financial year \u2014 plan your contributions before 31 March.",
+          "The 80C deduction applies in the old regime; check your regime before optimizing.",
+          "Badges in the screener help you spot ELSS schemes at a glance."
+        ]
+      }
+    ],
+    "related_slugs": ["what-is-pe-ratio", "index-fund-vs-etf"],
+    "updated_at": "2026-08-01"
+  },
+  {
+    "slug": "signal-score-explained",
+    "title": "How the Signal Score works (and how it is tested)",
+    "tagline": "Every recommendation in this app rests on one number. This is what the number means, what it does not mean, and the walk-forward evidence behind it.",
+    "category": "Product",
+    "reading_minutes": 4,
+    "seo_meta": {
+      "description": "A transparent explanation of the Signal Score: the trend, momentum, volume and quality inputs, what the confidence measure means, and the published walk-forward track record."
+    },
+    "sections": [
+      {
+        "heading": "The short version",
+        "body": "The Signal Score is a rule-based number from \u2212100 to +100. Positive means the checklist is leaning favourable; negative means the checklist is leaning against the stock. It is built from four groups of rules \u2014 trend, momentum, volume and quality \u2014 and the weights of those groups are configurable, not hidden.",
+        "bullets": [
+          "Range \u2212100 (weakest) to +100 (strongest).",
+          "Not a probability \u2014 it is a weighted checklist.",
+          "The weights are configuration, visible in the product settings."
+        ]
+      },
+      {
+        "heading": "What feeds the score",
+        "body": "Trend rules reward price above its 50- and 200-day averages and golden crosses. Momentum rules reward RSI in a strong-but-not-frothy zone and MACD alignment. Volume rules reward conviction behind moves. Quality rules reward reasonable valuation and strong fundamentals: low PEG, high and steady ROE, low debt.\n\nEach rule adds or subtracts a fixed number of points. The final score is the sum, and the Confidence figure separately measures how much the pillars agree \u2014 a high score where only one pillar is positive is flagged as low confidence.",
+        "bullets": [
+          "Trend, momentum, volume and quality each contribute weighted points.",
+          "Confidence measures agreement across pillars, not probability of profit.",
+          "The engine is rule-based and reproducible \u2014 no black box."
+        ]
+      },
+      {
+        "heading": "How it is tested: the walk-forward record",
+        "body": "The app publishes a dated track record: the exact signal engine is replayed over history on a fixed universe, sampling a signal at regular intervals with no lookahead \u2014 indicators at time t use only data up to t. Each signal is then measured at 30, 90 and 365-day horizons against the NIFTY50 benchmark.\n\nThe results are public and dated, with the methodology and caveats (no fees, no slippage, historical fundamentals not backfilled). Past performance is not a guarantee \u2014 but you get to see the evidence, not just the marketing.",
+        "bullets": [
+          "Walk-forward replay: no lookahead, fixed universe, regular sampling.",
+          "Hit-rates published per horizon with benchmark comparison.",
+          "Every live scan is also logged and scored, feeding the same verification engine."
+        ]
+      },
+      {
+        "heading": "What the score is not",
+        "body": "A high Signal Score is not a buy certificate. It does not know your risk profile, your time horizon, or whether the price you will pay is fair. Use it as one input alongside price, valuation, and \u2014 above all \u2014 your own understanding of the business.\n\nThe tool is educational, not SEBI-registered advice. The educational note shown with every result is part of that promise: it tells you where data comes from and when it was last updated, so you can judge the output the same way you would judge any analyst.",
+        "bullets": [
+          "The score is an input, not an instruction.",
+          "Pair it with price, valuation, and your own research.",
+          "Data freshness and source are disclosed on every screen."
+        ]
+      }
+    ],
+    "related_slugs": ["what-is-pe-ratio"],
+    "updated_at": "2026-08-01"
+  },
+  {
+    "slug": "drawdowns-and-staying-invested",
+    "title": "Drawdowns: the price of returns you will have to pay",
+    "tagline": "Every equity investor will live through a \u221230% or worse drawdown. Understanding that is not pessimism \u2014 it is the only way to survive long enough to earn the returns.",
+    "category": "Strategy",
+    "reading_minutes": 4,
+    "seo_meta": {
+      "description": "What market drawdowns are, why they are the cost of equity returns, how deep Indian indices have fallen, and how to plan for them instead of panic-selling."
+    },
+    "sections": [
+      {
+        "heading": "What a drawdown is",
+        "body": "A drawdown is the distance from a peak to the following trough. If the Nifty 50 rises to 25,000 and later falls to 17,500, that is a \u221230% drawdown \u2014 regardless of how many years it took. Every equity index in history has experienced drawdowns of this size; the Nifty 50 has fallen more than 30% in multiple cycles since 2000.",
+        "bullets": [
+          "Drawdown = peak-to-trough decline, measured in %.",
+          "They are normal, recurring and unavoidable in equities.",
+          "The question is not \u2018if\u2019 you will see one, but \u2018how you will behave in it\u2019."
+        ]
+      },
+      {
+        "heading": "Why drawdowns are the entry fee",
+        "body": "Returns and drawdowns come from the same source: price volatility. You cannot keep the upside of growth without accepting the downside of corrections. The asset that never falls also rarely grows in real terms after tax and inflation.\n\nThis is why a realistic plan matters more than a clever pick. If your emergency fund, time horizon and goal are built around the possibility of a \u221230% year, a drawdown is an inconvenience, not a crisis. If they are not, a drawdown can force you to sell at the worst time.",
+        "bullets": [
+          "Volatility is the entry fee for equity growth.",
+          "A plan built on \u2018\u2018what if it falls 30%\u2019\u2019 survives bear markets.",
+          "Forced selling during drawdowns is the biggest destroyer of long-term wealth."
+        ]
+      },
+      {
+        "heading": "How to prepare instead of panic",
+        "body": "Three practical steps. First, size the equity portion so that a 30% drop is survivable \u2014 the pain should be annoying, not life-altering. Second, keep a separate emergency fund in cash so you never sell equities for living expenses. Third, decide in advance what you will do if markets fall 25%: most sensible plans simply keep investing through SIPs, which buy more units at lower prices.",
+        "bullets": [
+          "Asset allocation first: size risk to your sleep, not to your greed.",
+          "Emergency cash separate from investments, always.",
+          "Pre-commit to a rule (e.g. keep SIPs running) before the drawdown arrives."
+        ]
+      },
+      {
+        "heading": "What the tool can do for you",
+        "body": "The risk profile and goal planner start from your time horizon and loss tolerance rather than from \u2018hot picks\u2019. The mutual-fund basket and goal planner show how a sensible allocation looks, and the track record page shows real drawdowns on the published strategy \u2014 including the losing months \u2014 so you can see the whole picture before committing a rupee.",
+        "bullets": [
+          "Plan from horizon and tolerance, not from returns.",
+          "Read the track record's drawdown numbers, not just the hit-rates.",
+          "A 30% dip is a reason your allocation was sized right, not a reason to panic."
+        ]
+      }
+    ],
+    "related_slugs": ["what-is-pe-ratio", "elss-tax-saving"],
+    "updated_at": "2026-08-01"
+  }
+]

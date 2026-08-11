@@ -12,6 +12,7 @@ from screener.core.container import container
 from screener.core.indicators import add_all
 from screener.core.interfaces import MarketDataProvider
 from screener.core.models import Action, Recommendation, StockMetrics
+from screener.services.plain_language import build_thesis
 from screener.services.scoring_engine import ScoringEngine
 
 
@@ -23,8 +24,15 @@ class AnalysisService:
         data_provider: MarketDataProvider | None = None,
         scoring_engine: ScoringEngine | None = None,
     ):
-        self._data = data_provider or container.resolve(MarketDataProvider)
+        self._data = data_provider
         self._scorer = scoring_engine or ScoringEngine()
+
+    @property
+    def _provider(self) -> MarketDataProvider:
+        """Resolve the provider lazily so config changes apply at runtime."""
+        if self._data is not None:
+            return self._data
+        return container.resolve(MarketDataProvider)
 
     def analyze(self, symbol: str, app_config: AppConfig | None = None) -> Recommendation:
         """Produce a full recommendation for a symbol.
@@ -34,12 +42,24 @@ class AnalysisService:
         """
         effective_config = app_config or config
         resolved = symbol
-        resolver = getattr(self._data, "resolve_symbol", None)
+        resolver = getattr(self._provider, "resolve_symbol", None)
         if callable(resolver):
             resolved = resolver(symbol) or symbol
 
-        history = self._data.fetch_history(resolved)
-        if history is None or history.empty or len(history) < 60:
+        history = self._provider.fetch_history(
+            resolved, period=effective_config.data.default_period
+        )
+        min_rows = effective_config.data.min_history_rows
+        if history is None or history.empty or len(history) < min_rows:
+            # New listings or a provider hiccup can leave <min_rows of data at
+            # the default period; retry once with a longer lookback first.
+            history = self._provider.fetch_history(
+                resolved, period=effective_config.data.fallback_period
+            )
+
+        # Clean: drop rows where Close is NaN (Yahoo placeholder rows)
+        history = history.dropna(subset=["Close"]) if history is not None else None
+        if history is None or history.empty or len(history) < min_rows:
             return Recommendation(
                 symbol=symbol.upper(),
                 action=Action.HOLD,
@@ -48,18 +68,7 @@ class AnalysisService:
                 error="insufficient price history",
             )
 
-        # Clean: drop rows where Close is NaN (Yahoo placeholder rows)
-        history = history.dropna(subset=["Close"])
-        if len(history) < 60:
-            return Recommendation(
-                symbol=symbol.upper(),
-                action=Action.HOLD,
-                score=0.0,
-                price=0.0,
-                error="insufficient price history after cleaning",
-            )
-
-        info = self._data.fetch_info(resolved)
+        info = self._provider.fetch_info(resolved)
         df = add_all(history)
         last, prev = df.iloc[-1], df.iloc[-2]
         price = float(last["Close"])
@@ -73,6 +82,10 @@ class AnalysisService:
             )
         score, reasons = scorer.total_score(last, prev, info)
         score = float(max(-100, min(100, score)))
+
+        # Phase-1: transparent confidence + per-pillar breakdown for this call.
+        confidence = scorer.confidence(last, prev, info)
+        pillars = scorer.pillar_scores(last, prev, info)
 
         # Map to action
         if score >= effective_config.scoring.buy_threshold:
@@ -90,8 +103,8 @@ class AnalysisService:
         # Assemble metrics
         metrics = self._build_metrics(price, last, info)
 
-        return Recommendation(
-            symbol=self._data.normalize_symbol(resolved),
+        rec = Recommendation(
+            symbol=self._provider.normalize_symbol(resolved),
             action=action,
             score=score,
             price=round(price, 2),
@@ -101,7 +114,13 @@ class AnalysisService:
             risk_reward=rr,
             reasons=reasons,
             metrics=metrics,
+            confidence=confidence,
+            pillars=pillars,
         )
+        # Phase-2: beginner-first plain-language thesis card (drivers, risk
+        # badge, role, allocation, "what could go wrong").
+        rec.thesis_data = build_thesis(rec)
+        return rec
 
     def _build_levels(
         self,

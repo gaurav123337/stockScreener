@@ -22,10 +22,16 @@ class IndianMarketService:
             raise DataSourceError("Indian market API is not configured")
         return self.gateway
 
-    @staticmethod
-    def _envelope(data: Any, warnings: list[str] | None = None) -> dict[str, Any]:
+    def _provider(self) -> str:
+        """Active provider name, from the adapter itself (swap-proof)."""
+        return getattr(self.gateway, "provider_name", "indian_api") if self.gateway else "indian_api"
+
+    def _envelope(self, data: Any, warnings: list[str] | None = None) -> dict[str, Any]:
         return IndianApiEnvelope(
-            data=data, fetched_at=datetime.now(timezone.utc), warnings=warnings or []
+            data=data,
+            provider=self._provider(),
+            fetched_at=datetime.now(timezone.utc),
+            warnings=warnings or [],
         ).model_dump(mode="json")
 
     @staticmethod
@@ -56,9 +62,21 @@ class IndianMarketService:
     def rollout_status(self) -> dict[str, Any]:
         gateway = self.gateway
         telemetry = gateway.telemetry().model_dump() if gateway is not None else None
+        provider = config.indian_market_provider
+        if provider == "yahoo":
+            # The Yahoo adapter needs no provider key — it reuses the core
+            # market-data provider, so being enabled is enough.
+            configured = bool(config.indian_api.enabled)
+        else:
+            configured = bool(
+                config.indian_api.enabled
+                and config.indian_api.base_url
+                and config.indian_api.api_key
+            )
         return {
             "enabled": config.indian_api.enabled,
-            "configured": bool(config.indian_api.base_url and config.indian_api.api_key),
+            "provider": provider,
+            "configured": configured,
             "market_data_provider": config.market_data_provider,
             "telemetry": telemetry,
         }

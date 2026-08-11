@@ -1,6 +1,6 @@
 import { api } from "@/api/endpoints";
 import { Card } from "@/components/ui/Card";
-import type { AdminOverview } from "@/types/api";
+import type { AdminOverview, AnalyticsOverview } from "@/types/api";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -17,6 +17,26 @@ function MetricCard({ metric }: { metric: Metric }) {
 
 function Breakdown({ heading, values, linkFor }: { heading: string; values: Record<string, number>; linkFor: (key: string) => string }) {
   return <Card><h2 className="font-bold">{heading}</h2><div className="mt-3 divide-y divide-border">{Object.entries(values).map(([key, value]) => <Link key={key} to={linkFor(key)} className="flex items-center justify-between gap-3 py-2 text-sm hover:text-brand"><span className="capitalize">{displayLabel(key)}</span><strong>{value}</strong></Link>)}</div></Card>;
+}
+
+const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
+
+function AnalyticsPanel({ data }: { data: AnalyticsOverview }) {
+  const kpis: Metric[] = [
+    { label: "DAU", value: data.dau, to: "/control-center/users" },
+    { label: "WAU", value: data.wau, to: "/control-center/users" },
+    { label: "MRR (INR)", value: data.mrr_inr, to: "/control-center/users" },
+    { label: "Total users", value: data.total_users, to: "/control-center/users" },
+  ];
+  return <Card className="p-0">
+    <div className="border-b border-border px-4 py-3"><h2 className="font-bold">Product analytics</h2><p className="text-xs text-muted">DAU/WAU, funnel, conversion, retention &amp; MRR from the event log.</p></div>
+    <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">{kpis.map((kpi) => <MetricCard key={kpi.label} metric={kpi} />)}</div>
+    <div className="grid gap-4 border-t border-border p-4 md:grid-cols-2 xl:grid-cols-3">
+      <Card><h3 className="text-sm font-bold">Activation funnel (30d)</h3><div className="mt-3 divide-y divide-border">{data.funnel.map((step) => <div key={step.step} className="flex items-center justify-between gap-3 py-2 text-sm"><span className="capitalize">{step.step.replaceAll("_", " ")}</span><strong>{step.users}</strong></div>)}</div></Card>
+      <Card><h3 className="text-sm font-bold">Conversion</h3><div className="mt-3 space-y-3 text-sm"><div className="flex justify-between gap-3"><span>Free -&gt; Pro (checkout)</span><strong>{pct(data.free_to_pro_conversion)}</strong></div><div className="flex justify-between gap-3"><span>Trial -&gt; paid</span><strong>{pct(data.trial_to_paid_conversion)}</strong></div><div className="flex justify-between gap-3"><span>90-day retention</span><strong>{pct(data.retention_90d)}</strong></div><div className="flex justify-between gap-3"><span>Push opt-in rate</span><strong>{pct(data.push_opt_in_rate)}</strong></div></div></Card>
+      <Card><h3 className="text-sm font-bold">Revenue</h3><div className="mt-3 space-y-3 text-sm"><div className="flex justify-between gap-3"><span>Monthly recurring revenue</span><strong>₹{data.mrr_inr.toLocaleString("en-IN")}</strong></div><p className="text-xs text-muted">Yearly plans are normalized to their monthly equivalent.</p></div></Card>
+    </div>
+  </Card>;
 }
 
 function Dashboard({ data }: { data: AdminOverview }) {
@@ -51,5 +71,6 @@ function Dashboard({ data }: { data: AdminOverview }) {
 
 export default function OverviewPage() {
   const query = useQuery({ queryKey: ["admin", "overview"], queryFn: api.adminOverview });
-  return <><PageHeader title="Operations overview" description="Current account, verification, feedback, and configuration health." /><QueryState loading={query.isLoading} error={query.error}>{query.data && <Dashboard data={query.data} />}</QueryState></>;
+  const analyticsQuery = useQuery({ queryKey: ["admin", "analytics"], queryFn: api.adminAnalytics });
+  return <><PageHeader title="Operations overview" description="Current account, verification, feedback, configuration, and product health." /><QueryState loading={query.isLoading} error={query.error}>{query.data && <Dashboard data={query.data} />}</QueryState>{analyticsQuery.data && <div className="mt-5"><AnalyticsPanel data={analyticsQuery.data} /></div>}</>;
 }

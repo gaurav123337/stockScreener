@@ -194,6 +194,7 @@ class AuthService:
             email_verified_at=user.email_verified_at,
             role=user.role,
             status=user.status,
+            tier=user.tier,
             created_at=user.created_at,
             last_login_at=user.last_login_at,
             preferences=user.preferences,

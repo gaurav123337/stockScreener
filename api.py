@@ -16,17 +16,23 @@ import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Thread
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile, File
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request, UploadFile, File
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from screener.bootstrap import bootstrap, get_service
+from screener.core.compliance import (
+    compliance_block,
+    coverage_ratio,
+    provenance_block,
+)
 from screener.core.config import config
 from screener.core.feedback_models import FeedbackSubmission, FeedbackWorkflowUpdate
 from screener.core.interfaces import MarketDataProvider
@@ -39,17 +45,31 @@ from screener.core.responses import (
     NotFoundError,
     ValidationError,
 )
+from screener.core.mf_models import FundScreenerRequest
+from screener.core.subscription_models import subscription_store
 from screener.core.user_models import UserCreate, UserLogin, UserProfile
 from screener.services import (
     AnalysisService,
+    AlertService,
+    AnalyticsService,
     AuthService,
+    BacktestService,
     BrokerService,
+    CheckBeforeBuyService,
+    ContentService,
     ControlCenterService,
+    FeedbackLoopService,
     FeedbackService,
     FilterService,
     KnowledgeService,
+    MutualFundService,
     PreferencesService,
+    RecommendationService,
+    RiskProfileService,
+    PlanService,
     ScanService,
+    ScorecardService,
+    SubscriptionService,
     VerificationService,
     IndianMarketService,
 )
@@ -69,12 +89,48 @@ WEB = DIST if (DIST / "index.html").exists() else LEGACY_WEB
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: ensure guest user exists. Shutdown: cleanup."""
+    """Startup: ensure guest user exists + warm the track record. Shutdown: cleanup."""
     auth = get_service(AuthService)
     auth.ensure_guest_user()
     control_center = get_service(ControlCenterService)
     control_center.load_active_config()
     control_center.bootstrap_product_owner()
+
+    # Warm the published walk-forward backtest in the background so the first
+    # page view never blocks on a multi-minute replay — and backfill its
+    # signals into the verification log so /api/verify returns dated, nonzero
+    # results from day one (stamped system/backtest, deduplicated on restart).
+    def _warm_backtest():
+        try:
+            backtest = get_service(BacktestService)
+            verification = get_service(VerificationService)
+            if verification.has_backtest_seed():
+                backtest.get()
+            else:
+                verification.seed_from_backtest(backtest.replay_records())
+            # Warm the index series too, so the first /api/verify call reads the
+            # benchmark from disk instead of a slow direct download.
+            from screener.services.evaluation import load_benchmark
+
+            load_benchmark(
+                get_service(MarketDataProvider),
+                config.verification.benchmark_symbol,
+            )
+        except Exception:
+            pass
+
+    Thread(target=_warm_backtest, daemon=True).start()
+
+    # Phase-3: warm the mutual-fund universe (AMFI NAV feed) in the background
+    # so the first screener call reads the cached universe instead of building
+    # it inline. Reuses the daily disk cache, so restarts are cheap.
+    def _warm_mutual_funds():
+        try:
+            get_service(MutualFundService).universe()
+        except Exception:
+            pass
+
+    Thread(target=_warm_mutual_funds, daemon=True).start()
     yield
 
 
@@ -211,6 +267,13 @@ async def require_product_owner(user: UserProfile = Depends(require_auth)) -> Us
     return user
 
 
+async def require_pro(user: UserProfile = Depends(require_auth)) -> UserProfile:
+    """Strict auth + active Pro tier. The gate lives server-side."""
+    from screener.services import SubscriptionService
+    get_service(SubscriptionService).require_pro(user)
+    return user
+
+
 # --------------------------------------------------------------------------- #
 # Request models
 # --------------------------------------------------------------------------- #
@@ -241,6 +304,37 @@ class PreferencesBody(BaseModel):
 
 class WatchlistBody(BaseModel):
     symbols: list[str] = Field(..., max_length=200)
+
+
+class RiskProfileBody(BaseModel):
+    answers: dict[str, str] = Field(..., max_length=20)
+
+
+class PlanBody(BaseModel):
+    risk_level: str = Field(..., min_length=1, max_length=20)
+    monthly_amount: float = Field(0, ge=0, le=1_000_000_000)
+    horizon_years: int = Field(1, ge=0, le=80)
+    goal: str = Field("wealth", max_length=30)
+
+
+class FundRecommendBody(BaseModel):
+    risk_level: str = Field(..., min_length=1, max_length=20)
+    goal: str = Field("wealth", max_length=30)
+    monthly_amount: float = Field(0, ge=0, le=1_000_000_000)
+    horizon_years: int = Field(5, ge=0, le=80)
+
+
+class FundCompareBody(BaseModel):
+    codes: list[int] = Field(..., min_length=2, max_length=4)
+
+
+class SipBody(BaseModel):
+    mode: str = Field("sip", max_length=20)
+    monthly_amount: float = Field(0, ge=0, le=1_000_000_000)
+    lumpsum_amount: float = Field(0, ge=0, le=1_000_000_000)
+    years: int = Field(10, ge=1, le=50)
+    assumed_return_pct: float = Field(12, ge=0, le=60)
+    step_up_pct: float = Field(0, ge=0, le=50)
 
 
 class FeedbackBody(FeedbackSubmission):
@@ -290,6 +384,7 @@ def register(body: UserCreate):
     """Create a new user account."""
     auth = get_service(AuthService)
     result = auth.register(body)
+    _analytics().track(result.user.user_id, "auth_register")
     return result.model_dump(mode="json")
 
 
@@ -298,6 +393,7 @@ def login(body: UserLogin):
     """Log in and get an access token."""
     auth = get_service(AuthService)
     result = auth.login(body)
+    _analytics().track(result.user.user_id, "auth_login")
     return result.model_dump(mode="json")
 
 
@@ -347,6 +443,17 @@ def reset_password(body: PasswordResetBody):
 @app.get("/api/admin/overview")
 def admin_overview(user: UserProfile = Depends(require_product_owner)):
     return get_service(ControlCenterService).dashboard()
+
+
+@app.get("/api/admin/analytics")
+def admin_analytics(user: UserProfile = Depends(require_product_owner)):
+    """Product KPIs from the real event log + billing state.
+
+    DAU/WAU, activation funnel, Free->Pro conversion, trial->paid, 90-day
+    retention, MRR and push opt-in rate — the Phase-5 audit KPIs that were
+    previously unmeasured. Computed at query time; no event source is hit.
+    """
+    return _analytics().overview_dict()
 
 
 @app.get("/api/admin/users")
@@ -491,6 +598,186 @@ def set_watchlist(body: WatchlistBody, user: UserProfile = Depends(get_current_u
 
 
 # --------------------------------------------------------------------------- #
+# Beginner-first UX: onboarding, risk profile, goal-based plan, glossary
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/onboarding/questions")
+def onboarding_questions(user: UserProfile = Depends(get_current_user)):
+    """The plain-language risk questionnaire (no stock-market vocabulary)."""
+    return {"questions": get_service(RiskProfileService).questions()}
+
+
+@app.get("/api/risk-profile")
+def get_risk_profile(user: UserProfile = Depends(get_current_user)):
+    """The current user's saved risk profile (or null if not onboarded)."""
+    profile = get_service(RiskProfileService).get_profile(user.user_id)
+    return profile.model_dump(mode="json") if profile else {"level": None}
+
+
+@app.post("/api/risk-profile")
+def save_risk_profile(body: RiskProfileBody, user: UserProfile = Depends(get_current_user)):
+    """Score and persist the user's risk profile from questionnaire answers."""
+    profile = get_service(RiskProfileService).save_profile(user.user_id, body.answers)
+    _analytics().track(user.user_id, "risk_profile_saved")
+    return profile.model_dump(mode="json")
+
+
+@app.post("/api/plan")
+def build_plan(body: PlanBody, user: UserProfile = Depends(get_current_user)):
+    """Build a goal-based starter basket from a risk profile + amount + horizon."""
+    preferences = get_service(PreferencesService)
+    effective_config = preferences.get_effective_config(user.user_id)
+    try:
+        plan = get_service(PlanService).build_plan(
+            risk_level=body.risk_level,
+            monthly_amount=body.monthly_amount,
+            horizon_years=body.horizon_years,
+            goal=body.goal,
+            app_config=effective_config,
+        )
+    except Exception as e:
+        raise DataSourceError(f"Plan could not be built: {e}")
+    _analytics().track(
+        user.user_id, "plan_built",
+        risk_level=body.risk_level, horizon_years=body.horizon_years,
+    )
+    return plan.model_dump(mode="json")
+
+
+@app.get("/api/glossary")
+def get_glossary(user: UserProfile = Depends(get_current_user)):
+    """Plain-language definitions for every metric a beginner might see."""
+    from screener.services.plain_language import glossary
+    return {"terms": glossary()}
+
+
+# --------------------------------------------------------------------------- #
+# Phase-3: Mutual-fund pillar (AMFI NAV feed)
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/mutual-funds/status")
+def mutual_fund_status(user: UserProfile = Depends(get_current_user)):
+    """Universe size, data source, and last-refresh timestamp."""
+    try:
+        return get_service(MutualFundService).status()
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund data unavailable: {e}")
+
+
+@app.get("/api/mutual-funds/categories")
+def mutual_fund_categories(user: UserProfile = Depends(get_current_user)):
+    """The beginner-friendly SEBI buckets used by the screener."""
+    return {"categories": get_service(MutualFundService).categories()}
+
+
+@app.get("/api/mutual-funds/screener")
+def mutual_fund_screener(
+    category: str = "",
+    max_expense_ratio: float | None = None,
+    min_aum_cr: float | None = None,
+    min_return_1y: float | None = None,
+    min_return_3y: float | None = None,
+    min_return_5y: float | None = None,
+    max_risk_rating: int | None = None,
+    min_fund_age_years: float | None = None,
+    manager: str = "",
+    elss_only: bool = False,
+    direct_only: bool = True,
+    sort_by: str = "sharpe",
+    sort_dir: str = "desc",
+    limit: int = 50,
+    offset: int = 0,
+    user: UserProfile = Depends(get_current_user),
+):
+    """Screen the direct-plan universe by category / cost / returns / risk."""
+    request = FundScreenerRequest(
+        category=category or None,
+        max_expense_ratio=max_expense_ratio,
+        min_aum_cr=min_aum_cr,
+        min_return_1y=min_return_1y,
+        min_return_3y=min_return_3y,
+        min_return_5y=min_return_5y,
+        max_risk_rating=max_risk_rating,
+        min_fund_age_years=min_fund_age_years,
+        manager=manager.strip() or None,
+        elss_only=elss_only,
+        direct_only=direct_only,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        limit=limit,
+        offset=offset,
+    )
+    try:
+        result = get_service(MutualFundService).screener(request)
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund screener failed: {e}")
+    _analytics().track(
+        user.user_id, "mf_screener",
+        category=category or "", direct_only=direct_only,
+    )
+    return result.model_dump(mode="json")
+
+
+@app.get("/api/mutual-funds/{scheme_code}")
+def mutual_fund_detail(scheme_code: int, user: UserProfile = Depends(get_current_user)):
+    """Full scheme detail + trailing NAV history."""
+    try:
+        detail = get_service(MutualFundService).detail(scheme_code)
+    except LookupError:
+        raise NotFoundError(f"Mutual fund scheme {scheme_code} not found")
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund detail failed: {e}")
+    return detail.model_dump(mode="json")
+
+
+@app.post("/api/mutual-funds/recommend")
+def mutual_fund_recommend(body: FundRecommendBody, user: UserProfile = Depends(get_current_user)):
+    """A profiled direct-plan fund basket for a risk profile + goal."""
+    try:
+        basket = get_service(MutualFundService).recommend(
+            risk_level=body.risk_level,
+            goal=body.goal,
+            monthly_amount=body.monthly_amount,
+            horizon_years=body.horizon_years,
+        )
+    except ValueError as e:
+        raise ValidationError(f"Invalid risk level: {e}")
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund recommendation failed: {e}")
+    _analytics().track(
+        user.user_id, "mf_recommend",
+        risk_level=body.risk_level, goal=body.goal,
+    )
+    return basket.model_dump(mode="json")
+
+
+@app.post("/api/mutual-funds/compare")
+def mutual_fund_compare(body: FundCompareBody, user: UserProfile = Depends(get_current_user)):
+    """Side-by-side comparison of 2-4 schemes."""
+    try:
+        comparison = get_service(MutualFundService).compare(body.codes)
+    except Exception as e:
+        raise DataSourceError(f"Mutual-fund comparison failed: {e}")
+    return comparison.model_dump(mode="json")
+
+
+@app.post("/api/mutual-funds/sip")
+def mutual_fund_sip(body: SipBody, user: UserProfile = Depends(get_current_user)):
+    """SIP / lumpsum / step-up projection (educational, not a forecast)."""
+    result = get_service(MutualFundService).sip_calculator(
+        mode=body.mode,
+        monthly_amount=body.monthly_amount,
+        lumpsum_amount=body.lumpsum_amount,
+        years=body.years,
+        assumed_return_pct=body.assumed_return_pct,
+        step_up_pct=body.step_up_pct,
+    )
+    _analytics().track(user.user_id, "mf_sip", mode=body.mode)
+    return result.model_dump(mode="json")
+
+
+
+# --------------------------------------------------------------------------- #
 # Feedback API
 # --------------------------------------------------------------------------- #
 
@@ -552,7 +839,7 @@ def recommend(symbol: str, user: UserProfile = Depends(get_current_user)):
 
     if rec.error is None:
         try:
-            verification.log_prediction(rec)
+            verification.log_prediction(rec, user.user_id)
         except Exception:
             pass  # Logging is non-critical
 
@@ -598,10 +885,39 @@ def scan(body: ScanBody, user: UserProfile = Depends(get_current_user)):
     except Exception as e:
         raise DataSourceError(f"Scan failed: {e}")
 
+    _analytics().track(
+        user.user_id, "scan_run",
+        matched=len(result.matched), total_scanned=result.total_scanned,
+        filter=body.filter or "", has_where=bool(body.where),
+    )
+
+    # Persist the served signals so the product's track record stays auditable
+    # (every call is dated and attributable to the requesting user).
+    try:
+        get_service(VerificationService).log_recommendations(
+            result.matched, user.user_id
+        )
+    except Exception:
+        pass  # Logging is non-critical
+
+    # Freshness + trust framing for the whole scan (Phase-0 compliance).
+    data = get_service(MarketDataProvider)
+    data_updated_at = getattr(data, "history_updated_at", lambda: None)()
+    block = compliance_block()
+    provenance = provenance_block(data_updated_at)
+
     return {
         "count": len(result.matched),
         "failed": result.failed,
         "results": [r.to_scan_row() for r in result.matched],
+        "universe_size": result.total_scanned,
+        "coverage": coverage_ratio(len(result.matched), result.total_scanned),
+        "scanned_at": datetime.now(timezone.utc).isoformat(),
+        "educational_note": block["educational_note"],
+        "disclaimer": block["disclaimer"],
+        "data_source": block["data_source"],
+        "data_updated_at": provenance["data_updated_at"],
+        "stale": provenance["stale"],
     }
 
 
@@ -612,6 +928,65 @@ def list_filters(user: UserProfile = Depends(get_current_user)):
     return {
         "predefined": filter_service.list_filters(),
         "fields": filter_service.get_filter_fields(),
+    }
+
+
+@app.get("/api/recommendations")
+def recommendations(
+    limit: int = 10,
+    action: str = "",
+    user: UserProfile = Depends(get_current_user),
+):
+    """Top-ranked stock picks from the default universe.
+
+    Reuses the same row shape as /api/scan so the existing results UI renders
+    them unchanged. Mutual-fund picks arrive as a separate asset class later.
+    """
+    if limit < 1 or limit > 200:
+        raise ValidationError("limit must be between 1 and 200")
+    if action and action not in ("BUY", "HOLD", "SELL"):
+        raise ValidationError("action must be BUY, HOLD, or SELL")
+
+    prefs = get_service(PreferencesService)
+    effective_config = prefs.get_effective_config(user.user_id)
+    engine = get_service(RecommendationService)
+    try:
+        payload = engine.recommend_stocks(
+            limit=limit,
+            action=action or None,
+            app_config=effective_config,
+        )
+    except Exception as e:
+        raise DataSourceError(f"Recommendations failed: {e}")
+
+    # Attach the same trust/freshness envelope as /api/scan (Phase-0).
+    data = get_service(MarketDataProvider)
+    data_updated_at = getattr(data, "history_updated_at", lambda: None)()
+    block = compliance_block()
+    provenance = provenance_block(data_updated_at)
+    payload["universe_size"] = payload.get("total_scanned", 0)
+    payload["coverage"] = coverage_ratio(payload["count"], payload.get("total_scanned", 0))
+    payload["scanned_at"] = datetime.now(timezone.utc).isoformat()
+    payload["educational_note"] = block["educational_note"]
+    payload["disclaimer"] = block["disclaimer"]
+    payload["data_source"] = block["data_source"]
+    payload["data_updated_at"] = provenance["data_updated_at"]
+    payload["stale"] = provenance["stale"]
+    return payload
+
+
+@app.get("/api/compliance")
+def compliance(user: UserProfile = Depends(get_current_user)):
+    """Trust framing + data-source attribution for the current data state.
+
+    The frontend fetches this once so every screen that shows a score or
+    action can carry the same prominent disclaimer and last-updated stamp.
+    """
+    data = get_service(MarketDataProvider)
+    data_updated_at = getattr(data, "history_updated_at", lambda: None)()
+    return {
+        **compliance_block(),
+        **provenance_block(data_updated_at),
     }
 
 
@@ -636,23 +1011,176 @@ def search(q: str = "", user: UserProfile = Depends(get_current_user)):
 
 @app.get("/api/verify")
 def verify(user: UserProfile = Depends(get_current_user)):
-    """Verify past predictions against current prices."""
+    """Verify past predictions against historical prices.
+
+    The evaluation window is rolling: every logged signal is measured at each
+    configured horizon (30/90/365 days) as soon as that horizon has elapsed, so
+    the reported hit-rates are dated and recompute as more history accrues.
+    """
     verification = get_service(VerificationService)
-    broker = get_service(BrokerService)
-
-    def price_of(sym: str):
-        try:
-            live = broker.get_ltp(sym)
-            if live:
-                return live
-        except Exception:
-            pass
-        return verification.get_current_price(sym)
-
     try:
-        return verification.verify(price_of).model_dump(mode="json")
+        return verification.verify().model_dump(mode="json")
     except Exception as e:
         raise DataSourceError(f"Verification failed: {e}")
+
+
+# --------------------------------------------------------------------------- #
+# Published track record (walk-forward backtest)
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/backtest")
+def backtest(user: UserProfile = Depends(get_current_user)):
+    """Published walk-forward track record of the signal engine.
+
+    Serves the cached report (regenerated automatically when stale); a cold
+    cache is recomputed on demand. This is the Stockopedia-style evidence the
+    "Signal Score" claims rest on.
+    """
+    try:
+        return get_service(BacktestService).get().model_dump(mode="json")
+    except Exception as e:
+        raise DataSourceError(f"Backtest unavailable: {e}")
+
+
+@app.post("/api/backtest/run")
+def backtest_run(user: UserProfile = Depends(require_product_owner)):
+    """Force a fresh walk-forward replay and republish the track record."""
+    try:
+        return get_service(BacktestService).run().model_dump(mode="json")
+    except Exception as e:
+        raise DataSourceError(f"Backtest failed: {e}")
+
+
+# --------------------------------------------------------------------------- #
+# Learn moat — beginner explainers served as JSON (and as SEO pages below)
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/learn")
+def learn_list(q: str = "", category: str | None = None):
+    """Catalogue of beginner explainer articles (the SEO/content moat)."""
+    articles = get_service(ContentService).search(q) if q else get_service(ContentService).list_articles()
+    if category:
+        articles = [a for a in articles if a.get("category") == category]
+    return {"articles": articles, "count": len(articles)}
+
+
+@app.get("/api/learn/{slug}")
+def learn_detail(slug: str):
+    """Full article body for the in-app reader."""
+    article = get_service(ContentService).get_article(slug)
+    return article.model_dump(mode="json")
+
+
+def _render_article_page(slug: str) -> str | None:
+    """Server-render a full HTML page for SEO crawlers and link-sharers."""
+    from html import escape
+
+    from screener.core.content_models import Article
+
+    try:
+        article: Article = get_service(ContentService).get_article(slug)
+    except Exception:
+        return None
+    meta_desc = escape(article.seo_meta.get("description", article.excerpt(155)))
+    title = escape(article.title)
+    sections_html = []
+    for section in article.sections:
+        paras = "".join(f"<p>{escape(p)}</p>" for p in section.body.split("\n\n") if p.strip())
+        bullets = ""
+        if section.bullets:
+            items = "".join(f"<li>{escape(b)}</li>" for b in section.bullets)
+            bullets = f"<ul>{items}</ul>"
+        sections_html.append(
+            f"<section><h2>{escape(section.heading)}</h2>{paras}{bullets}</section>"
+        )
+    related_links = "".join(
+        f'<a href="/learn/{escape(rel)}">{escape(rel)}</a>' for rel in article.related_slugs
+    )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title} — stockScreener Learn</title>
+<meta name="description" content="{meta_desc}">
+</head>
+<body>
+<header><a href="/learn">&larr; Learn hub</a></header>
+<main>
+<h1>{title}</h1>
+<p class="tagline">{escape(article.tagline)}</p>
+<p class="meta">{article.reading_minutes} min read · {escape(article.category)}</p>
+{"".join(sections_html)}
+<section class="related"><h2>Keep learning</h2>{related_links}</section>
+</main>
+<footer>Educational content. Not investment advice.</footer>
+</body>
+</html>"""
+
+
+@app.get("/learn", response_class=HTMLResponse)
+def learn_hub():
+    """Server-rendered list of all explainer articles (SEO landing page)."""
+    from html import escape
+
+    cards = []
+    for a in get_service(ContentService).list_articles():
+        desc = escape(a["excerpt"])
+        cards.append(
+            f'<article><h2><a href="/learn/{a["slug"]}">{escape(a["title"])}</a></h2>'
+            f'<p>{desc}</p><p class="meta">{a["reading_minutes"]} min · {escape(a["category"])}</p></article>'
+        )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn — stockScreener</title>
+<meta name="description" content="Beginner guides to Indian stock-market concepts: P/E ratio, index funds vs ETFs, ELSS tax saving, the Signal Score and drawdowns.">
+</head>
+<body>
+<header><h1>Learn</h1></header>
+<main>{"".join(cards)}</main>
+<footer>Educational content. Not investment advice.</footer>
+</body>
+</html>"""
+
+
+@app.get("/learn/{slug}", response_class=HTMLResponse)
+def learn_page(slug: str):
+    """Server-rendered article page for SEO crawlers and link-sharers."""
+    page = _render_article_page(slug)
+    if page is None:
+        raise NotFoundError("Article not found")
+    return page
+
+
+# --------------------------------------------------------------------------- #
+# Proof layer — monthly scorecard + illustrative success stories
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/scorecard")
+def scorecard(user: UserProfile = Depends(get_current_user)):
+    """Published monthly track record (backtest + live verification log)."""
+    try:
+        return get_service(ScorecardService).monthly_scorecard()
+    except Exception as e:
+        raise DataSourceError(f"Scorecard unavailable: {e}")
+
+
+@app.post("/api/scorecard/refresh")
+def scorecard_refresh(user: UserProfile = Depends(require_product_owner)):
+    """Force regeneration of the monthly scorecard (slow, admin-only)."""
+    try:
+        return get_service(ScorecardService).refresh()
+    except Exception as e:
+        raise DataSourceError(f"Scorecard refresh failed: {e}")
+
+
+@app.get("/api/stories")
+def success_stories(user: UserProfile = Depends(get_current_user)):
+    """Illustrative educational walkthroughs — explicitly not real users."""
+    return {"stories": get_service(ScorecardService).success_stories()}
 
 
 # --------------------------------------------------------------------------- #
@@ -917,6 +1445,332 @@ def broker_holdings(user: UserProfile = Depends(get_current_user)):
         return broker.get_holdings()
     except Exception as e:
         raise AppException(ErrorCodes.BROKER_ERROR, f"Failed to fetch holdings: {e}", 500)
+
+
+# --------------------------------------------------------------------------- #
+# Freemium / Pro billing (Phase 4)
+# --------------------------------------------------------------------------- #
+
+def _billing() -> SubscriptionService:
+    return get_service(SubscriptionService)
+
+
+def _analytics() -> AnalyticsService:
+    return get_service(AnalyticsService)
+
+
+class CheckoutBody(BaseModel):
+    plan_id: str = Field(..., min_length=3, max_length=40)
+
+
+class SaveScreenBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    filter_expr: str = ""
+    sort_by: str = "score"
+    sort_dir: str = "desc"
+    limit: int = Field(50, ge=1, le=500)
+    alert_enabled: bool = False
+    alert_email: str | None = Field(None, max_length=254)
+
+
+class HoldingsBody(BaseModel):
+    holdings: list[dict[str, Any]] = Field(..., min_length=1, max_length=200)
+
+
+class StrategyBacktestBody(BaseModel):
+    strategy: str = Field(..., min_length=1, max_length=60)
+    symbols: list[str] | None = None
+
+
+class TierBody(BaseModel):
+    tier: str = Field(..., min_length=3, max_length=10)
+
+
+@app.get("/api/billing/plans")
+def billing_plans(user: UserProfile = Depends(get_current_user)):
+    """Public plan catalog (pricing + feature list)."""
+    return {"plans": _billing().plans()}
+
+
+@app.get("/api/billing/entitlements")
+def billing_entitlements(user: UserProfile = Depends(require_auth)):
+    """The requesting user's effective entitlements (server-authoritative)."""
+    return _billing().entitlements(user).model_dump(mode="json")
+
+
+@app.post("/api/billing/checkout")
+def billing_checkout(body: CheckoutBody, user: UserProfile = Depends(require_auth)):
+    """Open a checkout session for a plan (unpaid until confirmed)."""
+    result = _billing().create_checkout(user, body.plan_id)
+    _analytics().track(user.user_id, "checkout_created", plan_id=body.plan_id)
+    return result
+
+
+@app.post("/api/billing/checkout/{session_id}/confirm")
+def billing_confirm(session_id: str, user: UserProfile = Depends(require_auth)):
+    """Settle a checkout session. Grants Pro when the gateway reports paid."""
+    result = _billing().confirm_checkout(user, session_id)
+    _analytics().track(
+        user.user_id, "checkout_paid",
+        plan_id=result.get("plan_id") or "", session_id=session_id,
+    )
+    return result
+
+
+@app.get("/api/billing/subscription")
+def billing_subscription(user: UserProfile = Depends(require_auth)):
+    """Current subscription state + active flag."""
+    return _billing().current_subscription(user)
+
+
+@app.post("/api/billing/cancel")
+def billing_cancel(user: UserProfile = Depends(require_auth)):
+    """Cancel at renewal (Pro keeps working until renews_at)."""
+    return _billing().cancel_subscription(user)
+
+
+# Admin tier management (product-owner only)
+@app.post("/api/admin/users/{user_id}/tier")
+def admin_user_tier(user_id: str, body: TierBody, user: UserProfile = Depends(require_product_owner)):
+    """Set a user's tier (free/pro) — direct grant or immediate revoke."""
+    return _billing().admin_set_tier(user_id, body.tier)
+
+
+# --------------------------------------------------------------------------- #
+# Pro: saved screens + email alerts
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/pro/screens")
+def pro_list_screens(user: UserProfile = Depends(require_auth)):
+    """List my saved screens (Free tier can hold one, Pro unlimited)."""
+    return {"screens": _billing().list_screens(user)}
+
+
+@app.post("/api/pro/screens")
+def pro_save_screen(body: SaveScreenBody, user: UserProfile = Depends(require_auth)):
+    """Save a screen; alerts require Pro."""
+    return _billing().save_screen(
+        user,
+        name=body.name,
+        filter_expr=body.filter_expr,
+        sort_by=body.sort_by,
+        sort_dir=body.sort_dir,
+        limit=body.limit,
+        alert_enabled=body.alert_enabled,
+        alert_email=body.alert_email,
+    )
+
+
+@app.delete("/api/pro/screens/{screen_id}")
+def pro_delete_screen(screen_id: str, user: UserProfile = Depends(require_auth)):
+    """Delete one of my saved screens."""
+    return _billing().delete_screen(user, screen_id)
+
+
+@app.post("/api/pro/screens/{screen_id}/evaluate")
+def pro_evaluate_screen(screen_id: str, user: UserProfile = Depends(require_pro)):
+    """Run a saved screen against the live universe and dispatch an alert."""
+    return _billing().evaluate_screen(user, screen_id)
+
+
+# --------------------------------------------------------------------------- #
+# Pro: portfolio analytics + per-strategy deep backtest
+# --------------------------------------------------------------------------- #
+
+@app.post("/api/pro/portfolio/analytics")
+def pro_portfolio_analytics(body: HoldingsBody, user: UserProfile = Depends(require_pro)):
+    """Aggregate analytics for a user-declared holding list."""
+    return _billing().portfolio_analytics(user, body.holdings)
+
+
+@app.post("/api/pro/strategy/backtest")
+def pro_strategy_backtest(body: StrategyBacktestBody, user: UserProfile = Depends(require_pro)):
+    """Focused per-strategy walk-forward replay on requested symbols."""
+    return _billing().strategy_backtest(user, body.strategy, body.symbols)
+
+
+# --------------------------------------------------------------------------- #
+# Alerts (Phase 5) — price, screen-hit and MF-NAV threshold rules
+# --------------------------------------------------------------------------- #
+
+class AlertRuleBody(BaseModel):
+    rule_type: str = Field(..., min_length=3, max_length=20)
+    name: str | None = Field(None, max_length=120)
+    symbol: str | None = Field(None, max_length=20)
+    scheme_code: str | None = Field(None, max_length=20)
+    direction: str = "above"
+    trigger_value: float = Field(..., ge=0)
+    screen_id: str | None = Field(None, max_length=64)
+    enabled: bool = True
+
+
+def _alerts() -> AlertService:
+    return get_service(AlertService)
+
+
+@app.get("/api/alerts")
+def alerts_list(user: UserProfile = Depends(require_pro)):
+    """List my alert rules (Pro)."""
+    return {"rules": [r.model_dump(mode="json") for r in _alerts().list_rules(user)]}
+
+
+@app.post("/api/alerts")
+def alerts_create(body: AlertRuleBody, user: UserProfile = Depends(require_pro)):
+    """Create an alert rule (price, screen_hit or mf_nav)."""
+    rule = _alerts().create_rule(user, body.model_dump())
+    _analytics().track(user.user_id, "alert_created", rule_type=rule.rule_type.value)
+    return rule.model_dump(mode="json")
+
+
+@app.delete("/api/alerts/{alert_id}")
+def alerts_delete(alert_id: str, user: UserProfile = Depends(require_pro)):
+    """Delete one of my alert rules."""
+    deleted = _alerts().delete_rule(user, alert_id)
+    if not deleted:
+        raise NotFoundError("Alert not found")
+    return {"deleted": True}
+
+
+@app.post("/api/alerts/{alert_id}/reset")
+def alerts_reset(alert_id: str, user: UserProfile = Depends(require_pro)):
+    """Re-arm a fired alert so it can fire again (one-shot semantics)."""
+    reset = _alerts().reset_rule(user, alert_id)
+    if not reset:
+        raise NotFoundError("Alert not found")
+    return {"reset": True}
+
+
+@app.post("/api/alerts/evaluate")
+def alerts_evaluate(symbols: list[str] = Body(default=[]), user: UserProfile = Depends(require_pro)):
+    """Run all my enabled rules against the live market; report fired alerts.
+
+    ``symbols`` optionally bounds the universe (watchlist-first). Each rule is
+    one-shot until reset, so this endpoint never spams.
+    """
+    return {"fired": _alerts().evaluate_user_alerts(user, symbols)}
+
+
+# --------------------------------------------------------------------------- #
+# PWA push subscriptions (Phase 5) — opt-in browser notifications
+# --------------------------------------------------------------------------- #
+
+class PushSubscribeBody(BaseModel):
+    endpoint: str = Field(..., min_length=8, max_length=512)
+    p256dh: str = ""
+    auth: str = ""
+    user_agent: str = ""
+
+
+@app.get("/api/push/public-key")
+def push_public_key():
+    """VAPID public key for the service worker (base64url, no padding)."""
+    return {"public_key": config.push.vapid_public_key}
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(body: PushSubscribeBody, user: UserProfile = Depends(require_auth)):
+    """Register this browser endpoint for push notifications."""
+    from screener.core.subscription_models import PushSubscription
+
+    sub = PushSubscription(
+        user_id=user.user_id,
+        endpoint=body.endpoint,
+        p256dh=body.p256dh,
+        auth=body.auth,
+        user_agent=body.user_agent,
+    )
+    subscription_store.upsert_push_subscription(sub)
+    _analytics().track(user.user_id, "push_opt_in")
+    return {"subscribed": True}
+
+
+@app.delete("/api/push/subscribe")
+def push_unsubscribe(endpoint: str, user: UserProfile = Depends(require_auth)):
+    """Remove this browser endpoint (called when the SW unsubscribes)."""
+    subscription_store.delete_push_subscription(endpoint)
+    return {"unsubscribed": True}
+
+
+# --------------------------------------------------------------------------- #
+# Check-before-buy (Phase 5) — research checklist + broker deep-links
+# --------------------------------------------------------------------------- #
+
+def _check() -> CheckBeforeBuyService:
+    return get_service(CheckBeforeBuyService)
+
+
+@app.get("/api/check/brokers")
+def check_brokers(user: UserProfile = Depends(get_current_user)):
+    """Brokers we can deep-link to (review-only; never order placement)."""
+    return {"brokers": _check().brokers()}
+
+
+@app.get("/api/check/deep-link/{broker_id}")
+def check_deep_link(broker_id: str, symbol: str, user: UserProfile = Depends(get_current_user)):
+    """Review-only deep-link to the symbol page in a user's broker app."""
+    return _check().broker_deep_link(broker_id, symbol)
+
+
+@app.get("/api/check/{symbol}")
+def check_before_buy(symbol: str, user: UserProfile = Depends(get_current_user)):
+    """Pre-trade checklist for a symbol (price vs plan, valuation, sizing)."""
+    if not symbol or len(symbol) > 50:
+        raise ValidationError("Invalid symbol")
+    analysis = get_service(AnalysisService)
+    preferences = get_service(PreferencesService)
+    effective_config = preferences.get_effective_config(user.user_id)
+    try:
+        rec = analysis.analyze(symbol, effective_config)
+    except Exception as e:
+        raise DataSourceError(f"Unable to analyze {symbol}: {e}")
+    if rec.error is not None:
+        raise AppException(
+            ErrorCodes.INSUFFICIENT_DATA,
+            f"No checklist is available for {symbol.upper()}: {rec.error}.",
+            422,
+        )
+    return _check().checklist(user, rec)
+
+
+# --------------------------------------------------------------------------- #
+# Feedback loop (Phase 5) — instrumented outcomes + published changelog
+# --------------------------------------------------------------------------- #
+
+def _feedback_loop() -> FeedbackLoopService:
+    return get_service(FeedbackLoopService)
+
+
+class PublishChangeBody(BaseModel):
+    version: str = "1.0.0"
+    date: str | None = None
+    title: str = Field(..., min_length=3, max_length=120)
+    summary: str = ""
+    weight_changes: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+@app.get("/api/feedback-loop/outcomes")
+def feedback_outcomes(user: UserProfile = Depends(get_current_user)):
+    """Instrumented per-band hit rates from matured signals."""
+    return _feedback_loop().outcome_stats()
+
+
+@app.get("/api/feedback-loop/suggestions")
+def feedback_suggestions(user: UserProfile = Depends(get_current_user)):
+    """Suggested weight changes — returned for review, never auto-applied."""
+    return _feedback_loop().weight_suggestions()
+
+
+@app.get("/api/feedback-loop/changelog")
+def feedback_changelog(user: UserProfile = Depends(get_current_user)):
+    """Publicly published scoring-model changes (transparency ledger)."""
+    return {"entries": _feedback_loop().changelog()}
+
+
+@app.post("/api/feedback-loop/publish")
+def feedback_publish(body: PublishChangeBody, user: UserProfile = Depends(require_product_owner)):
+    """Record a reviewed weight change in the published changelog (PO only)."""
+    entry = _feedback_loop().publish_change(user, body.model_dump())
+    return entry.model_dump(mode="json")
 
 
 # --------------------------------------------------------------------------- #

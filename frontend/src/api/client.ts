@@ -64,6 +64,7 @@ export function getStoredUser(): {
   display_name: string | null;
   role?: "user" | "product_owner";
   status?: "active" | "suspended";
+  tier?: "free" | "pro";
 } | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
@@ -75,7 +76,14 @@ export function getStoredUser(): {
 }
 
 export function setStoredUser(
-  user: { user_id: string; username: string; display_name: string | null; role?: string; status?: string } | null,
+  user: {
+    user_id: string;
+    username: string;
+    display_name: string | null;
+    role?: string;
+    status?: string;
+    tier?: string;
+  } | null,
 ): void {
   try {
     if (user) {
@@ -163,4 +171,6 @@ export const http = {
     request<T>(path, { method: "POST", body: body as BodyInit, ...options }),
   postForm: <T>(path: string, form: FormData, options?: FetchOptions<"json">) =>
     request<T>(path, { method: "POST", body: form, ...options }),
+  delete: <T>(path: string, options?: FetchOptions<"json">) =>
+    request<T>(path, { method: "DELETE", ...options }),
 };

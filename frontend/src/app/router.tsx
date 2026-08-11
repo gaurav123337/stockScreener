@@ -20,12 +20,29 @@ const ForgotPasswordPage = lazy(() => import("@/features/auth/ForgotPasswordPage
 const ResetPasswordPage = lazy(() => import("@/features/auth/ResetPasswordPage"));
 const VerifyEmailPage = lazy(() => import("@/features/auth/VerifyEmailPage"));
 const IndianMarketPage = lazy(() => import("@/features/indian-market/IndianMarketPage"));
+const MutualFundsPage = lazy(() => import("@/features/mutual-funds/MutualFundsPage"));
+const TrackRecordPage = lazy(() => import("@/features/track-record/TrackRecordPage"));
+const OnboardingPage = lazy(() => import("@/features/onboarding/OnboardingPage"));
+const PlanPage = lazy(() => import("@/features/plan/PlanPage"));
+const PortfolioPage = lazy(() => import("@/features/portfolio/PortfolioPage"));
 const ControlCenterLayout = lazy(() => import("@/features/control-center/ControlCenterLayout"));
 const OverviewPage = lazy(() => import("@/features/control-center/OverviewPage"));
 const UsersPage = lazy(() => import("@/features/control-center/UsersPage"));
 const FeedbackOpsPage = lazy(() => import("@/features/control-center/FeedbackOpsPage"));
 const ConfigPage = lazy(() => import("@/features/control-center/ConfigPage"));
 const AuditPage = lazy(() => import("@/features/control-center/AuditPage"));
+const PricingPage = lazy(() => import("@/features/pricing/PricingPage"));
+const ProPage = lazy(() => import("@/features/pro/ProPage"));
+const ProScreensPage = lazy(() => import("@/features/pro/ProScreensPage"));
+const ProPortfolioPage = lazy(() => import("@/features/pro/ProPortfolioPage"));
+const ProBacktestPage = lazy(() => import("@/features/pro/ProBacktestPage"));
+const LearnPage = lazy(() => import("@/features/learn/LearnPage"));
+const LearnDetailPage = lazy(() => import("@/features/learn/LearnDetailPage"));
+const AlertsPage = lazy(() => import("@/features/alerts/AlertsPage"));
+const ProofPage = lazy(() => import("@/features/proof/ProofPage"));
+const CheckPage = lazy(() => import("@/features/check/CheckPage"));
+const FeedbackLoopPage = lazy(() => import("@/features/feedback-loop/FeedbackLoopPage"));
+const IndexRedirect = lazy(() => import("./IndexRedirect"));
 
 export const router = createHashRouter([
   {
@@ -42,15 +59,31 @@ export const router = createHashRouter([
   {
     element: <AppLayout />,
     children: [
-      { index: true, element: <Navigate to="/recommend" replace /> },
+      { index: true, element: <IndexRedirect /> },
       { path: "recommend", element: <RecommendPage /> },
+      { path: "onboarding", element: <OnboardingPage /> },
+      { path: "plan", element: <PlanPage /> },
+      { path: "portfolio", element: <PortfolioPage /> },
       { path: "scan", element: <ScanPage /> },
       { path: "train", element: <TrainPage /> },
       { path: "brokers", element: <BrokersPage /> },
       { path: "indian-market", element: <IndianMarketPage /> },
+      { path: "mutual-funds", element: <MutualFundsPage /> },
+      { path: "track-record", element: <TrackRecordPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "guide", element: <GuidePage /> },
       { path: "feedback", element: <FeedbackPage /> },
+      { path: "pricing", element: <PricingPage /> },
+      { path: "pro", element: <ProPage /> },
+      { path: "pro/screens", element: <ProScreensPage /> },
+      { path: "pro/portfolio", element: <ProPortfolioPage /> },
+      { path: "pro/backtest", element: <ProBacktestPage /> },
+      { path: "learn", element: <LearnPage /> },
+      { path: "learn/:slug", element: <LearnDetailPage /> },
+      { path: "alerts", element: <AlertsPage /> },
+      { path: "proof", element: <ProofPage /> },
+      { path: "check", element: <CheckPage /> },
+      { path: "feedback-loop", element: <FeedbackLoopPage /> },
       { path: "auth/login", element: <LoginPage /> },
       { path: "auth/register", element: <RegisterPage /> },
       { path: "auth/forgot-password", element: <ForgotPasswordPage /> },

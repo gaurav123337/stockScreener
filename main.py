@@ -162,24 +162,22 @@ def cmd_learn(_args):
 
 def cmd_verify(_args):
     verification = get_service(VerificationService)
-    broker = get_service(BrokerService)
 
-    def price_of(symbol: str):
-        live = broker.get_ltp(symbol)
-        if live:
-            return live
-        return verification.get_current_price(symbol)
-
-    console.print("[bold]Verifying due predictions against current prices...[/bold]")
-    res = verification.verify(price_of)
-    console.print(f"Newly evaluated: {res.evaluated_now} | Total evaluated: {res.total_evaluated}")
-    if res.overall_hit_rate is not None:
-        console.print(f"[bold]Overall hit-rate: {res.overall_hit_rate}%[/bold]")
-        for a, s in res.by_action.items():
-            if s["n"]:
-                console.print(f"  {a}: {s['hit_rate']}% over {s['n']} calls")
+    console.print("[bold]Evaluating logged signals against historical prices...[/bold]")
+    res = verification.verify()
+    console.print(f"Total signals logged: {res.evaluated_now} | Evaluated: {res.total_evaluated}")
+    if res.horizons:
+        for h in res.horizons:
+            if h.n:
+                vs = f" (vs {res.benchmark_symbol} {h.vs_benchmark:+.2%})" if h.vs_benchmark is not None else ""
+                console.print(
+                    f"  {h.horizon_days}d: hit-rate {h.hit_rate}% over {h.n} calls, "
+                    f"avg {h.avg_return:+.2%}{vs}"
+                )
+        if res.overall_hit_rate is not None:
+            console.print(f"[bold]Overall hit-rate: {res.overall_hit_rate}%[/bold]")
     else:
-        console.print("No matured predictions yet — they are evaluated 30 days after each call.")
+        console.print("No matured signals yet — they are evaluated 30 days after each call.")
     console.print(f"[dim]Log: {config.predictions_file}[/dim]")
 
 

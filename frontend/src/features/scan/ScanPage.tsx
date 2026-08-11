@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { useToast } from "@/app/useToast";
+import { Disclaimer } from "@/components/Disclaimer";
 import { Section } from "@/components/Section";
 import { LoadingState } from "@/components/ui/Spinner";
 import type { ScanResponse } from "@/types/api";
@@ -18,6 +19,7 @@ function parseSymbols(raw: string): string[] {
 export default function ScanPage() {
   const { toast } = useToast();
   const filtersQuery = useQuery({ queryKey: ["filters"], queryFn: api.filters });
+  const complianceQuery = useQuery({ queryKey: ["compliance"], queryFn: api.compliance });
   const autocomplete = useStockAutocomplete();
   const [symbols, setSymbols] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("");
@@ -62,7 +64,10 @@ export default function ScanPage() {
 
   return (
     <>
-      <Section title="Scan" sub="Screen Nifty 50 (or your list) with a filter, ranked by score." />
+      <Section
+        title="Scan"
+        sub="Screen the Nifty 500 universe (or your own list) with a filter, ranked by score."
+      />
 
       <StockAutocomplete
         value={autocomplete.search}
@@ -98,6 +103,8 @@ export default function ScanPage() {
           onToggleRow={(index) => setOpenRow(openRow === index ? null : index)}
         />
       )}
+
+      <Disclaimer compliance={complianceQuery.data} />
     </>
   );
 }

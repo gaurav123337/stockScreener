@@ -14,6 +14,7 @@ export interface UserProfile {
   display_name: string | null;
   role: "user" | "product_owner";
   status: "active" | "suspended";
+  tier?: "free" | "pro";
   email_verified_at: string | null;
   created_at: string;
   last_login_at: string | null;
@@ -113,6 +114,24 @@ export interface AdminOverview {
   recent_config_publications: ConfigPublication[];
 }
 
+export interface AnalyticsFunnelStep {
+  step: string;
+  users: number;
+}
+
+export interface AnalyticsOverview {
+  generated_at: string;
+  dau: number;
+  wau: number;
+  total_users: number;
+  funnel: AnalyticsFunnelStep[];
+  free_to_pro_conversion: number;
+  trial_to_paid_conversion: number;
+  retention_90d: number;
+  mrr_inr: number;
+  push_opt_in_rate: number;
+}
+
 export interface ConfigPublication {
   version: number;
   values: Settings;
@@ -156,6 +175,10 @@ export interface ScanRow {
   sector: string | null;
   action: Action;
   score: number;
+  /** Phase-1 transparency measure (0..1) — NOT a probability of profit. */
+  confidence?: number | null;
+  /** Per-pillar score breakdown (trend/momentum/volume/fundamentals). */
+  pillars?: Record<string, number>;
   price: number | null;
   entry: number | null;
   target: number | null;
@@ -169,6 +192,97 @@ export interface ScanRow {
   roe: number | null;
   reasons: string[] | null;
   error?: string | null;
+  /* ---- Phase-2 thesis-card additions (plain language) ---- */
+  risk_badge?: string | null;
+  portfolio_role?: string | null;
+  /** Suggested share of the equity sleeve (0..1); null = don't add yet. */
+  allocation_size?: number | null;
+  drivers?: DriverScore[];
+  what_could_go_wrong?: string[];
+  thesis?: string | null;
+}
+
+/** One plain-language driver on a thesis card. */
+export interface DriverScore {
+  key: "trend" | "momentum" | "value" | "quality";
+  label: string;
+  score: number;
+  positive: boolean | null;
+  plain: string;
+  why: string[];
+}
+
+/* ------------------------- Onboarding / risk profile ----------------------- */
+
+export interface RiskOption {
+  value: string;
+  label: string;
+}
+
+export interface RiskQuestion {
+  id: string;
+  question: string;
+  options: RiskOption[];
+}
+
+export type RiskLevel = "conservative" | "moderate" | "aggressive";
+
+export interface RiskProfile {
+  level: RiskLevel;
+  label: string;
+  summary: string;
+  asset_split: { equity_delivery: number; mutual_funds: number; liquid: number };
+  expected_return_range: number[];
+  answers: Record<string, string>;
+  created_at?: string;
+}
+
+export interface RiskProfileResponse {
+  level: RiskLevel | null;
+  label?: string;
+  summary?: string;
+  asset_split?: RiskProfile["asset_split"];
+  expected_return_range?: number[];
+  answers?: Record<string, string>;
+}
+
+/* --------------------------------- Plan ------------------------------------ */
+
+export interface PlanBasketItem {
+  symbol: string;
+  name: string | null;
+  sector: string | null;
+  role: string;
+  weight: number;
+  score: number;
+  action: Action;
+  price: number;
+  plain: string;
+  risk_badge: string | null;
+  driver_highlights: string[];
+}
+
+export interface InvestmentPlan {
+  risk_level: RiskLevel;
+  risk_label: string;
+  goal: string;
+  monthly_amount: number;
+  horizon_years: number;
+  asset_split: RiskProfile["asset_split"];
+  basket: PlanBasketItem[];
+  mutual_funds: string[];
+  expected_return_range: number[];
+  conservative_return_range: number[];
+  notes: string[];
+  generated_at: string;
+  fund_schemes: FundRecommendation[];
+  fund_data_as_of: string | null;
+}
+
+/* --------------------------------- Glossary -------------------------------- */
+
+export interface GlossaryResponse {
+  terms: Record<string, { term: string; plain: string }>;
 }
 
 export interface ScanRequest {
@@ -182,11 +296,32 @@ export interface ScanResponse {
   count: number;
   failed: string[];
   results: ScanRow[];
+  /** Phase-0 trust/freshness envelope (see api.py /api/scan). */
+  universe_size: number;
+  coverage: number;
+  scanned_at: string;
+  educational_note?: string;
+  disclaimer?: string;
+  data_source?: string;
+  data_updated_at?: string | null;
+  stale?: boolean;
+}
+
+/** Trust framing + data-source attribution (GET /api/compliance). */
+export interface ComplianceResponse {
+  educational_note: string;
+  disclaimer: string;
+  data_source: string;
+  is_investment_advice: boolean;
+  data_updated_at: string | null;
+  stale: boolean;
 }
 
 export interface PredefinedFilter {
   name: string;
   description: string;
+  /** Phase-2: guided beginner presets are flagged so the UI shows them first. */
+  guided?: boolean;
 }
 
 export interface FiltersResponse {
@@ -217,7 +352,9 @@ export interface Settings {
   knowledge: SettingsSection;
   verification: SettingsSection;
   default_universe: string[];
-  [section: string]: SettingsSection | string[];
+  market_data_provider: string;
+  indian_market_provider: string;
+  [section: string]: SettingsSection | string[] | string;
 }
 
 export type SettingsPatch = Record<string, unknown>;
@@ -268,8 +405,42 @@ export type HoldingsResponse = Record<string, unknown>;
 
 /* ---------------------------------- Verification ----------------------------- */
 
+/** One evaluation horizon's aggregate stats (shared by verify + backtest). */
+export interface HorizonStats {
+  horizon_days: number;
+  n: number;
+  hit_rate: number | null;
+  avg_return: number | null;
+  avg_win: number | null;
+  avg_loss: number | null;
+  max_drawdown: number | null;
+  benchmark_avg_return: number | null;
+  vs_benchmark: number | null;
+  by_action: Record<string, { n: number; hit_rate: number; avg_return: number }>;
+}
+
 export interface VerifyResponse {
-  [key: string]: unknown;
+  evaluated_now: number;
+  total_evaluated: number;
+  overall_hit_rate: number | null;
+  by_action: Record<string, { n: number; hit_rate: number | null }>;
+  horizons: HorizonStats[];
+  benchmark_symbol: string | null;
+  window_start: string | null;
+  generated_at: string;
+}
+
+/** Published walk-forward track record (GET /api/backtest). */
+export interface BacktestReport {
+  status: string;
+  generated_at: string;
+  window_start: string;
+  window_end: string;
+  universe: string[];
+  universe_size: number;
+  horizons: HorizonStats[];
+  methodology: string[];
+  notes: string[];
 }
 
 /* ---------------------------- Indian market API ----------------------------- */
@@ -306,4 +477,454 @@ export interface IndianHistory {
 export interface IndianStats {
   stock_id: string;
   stats: unknown;
+}
+
+/* --------------------------- Mutual funds (Phase 3) -------------------------- */
+
+export type FundCategory =
+  | "large_cap"
+  | "mid_cap"
+  | "small_cap"
+  | "flexi_cap"
+  | "multi_cap"
+  | "value"
+  | "elss"
+  | "index"
+  | "liquid"
+  | "debt"
+  | "hybrid"
+  | "other";
+
+export interface FundReturns {
+  one_year: number | null;
+  three_year: number | null;
+  five_year: number | null;
+  ten_year: number | null;
+  since_inception: number | null;
+}
+
+/** Risk-adjusted stats from NAV history — a record of the past, not a forecast. */
+export interface FundRisk {
+  rating: number | null;
+  rating_label: string | null;
+  volatility_annual: number | null;
+  sharpe: number | null;
+  sortino: number | null;
+  max_drawdown: number | null;
+}
+
+export interface FundScheme {
+  scheme_code: number;
+  scheme_name: string;
+  fund_house: string | null;
+  category: FundCategory;
+  sebi_category: string | null;
+  is_direct: boolean;
+  is_growth: boolean;
+  is_elss: boolean;
+  nav: number | null;
+  nav_date: string | null;
+  isin_growth: string | null;
+  expense_ratio: number | null;
+  aum_cr: number | null;
+  launch_date: string | null;
+  fund_manager: string | null;
+  exit_load: string | null;
+  returns: FundReturns;
+  risk: FundRisk;
+  fund_age_years: number | null;
+  data_as_of: string | null;
+  source: string;
+  badges: string[];
+}
+
+export interface FundScreenerResult {
+  items: FundScheme[];
+  total: number;
+  categories: { value: FundCategory; label: string }[];
+  sort_by: string;
+  sort_dir: string;
+  data_as_of: string | null;
+  refreshed_at: string;
+  source: string;
+  stale: boolean;
+  note: string | null;
+}
+
+export interface FundAllocation {
+  category: FundCategory;
+  weight: number;
+  advice: string;
+}
+
+export interface FundRecommendation {
+  scheme_code: number;
+  scheme_name: string;
+  fund_house: string | null;
+  category: FundCategory;
+  sebi_category: string | null;
+  is_elss: boolean;
+  weight: number;
+  nav: number | null;
+  nav_date: string | null;
+  expense_ratio: number | null;
+  aum_cr: number | null;
+  returns: FundReturns;
+  risk: FundRisk;
+  badges: string[];
+  plain: string;
+}
+
+export interface FundBasket {
+  risk_level: RiskLevel;
+  risk_label: string;
+  goal: string;
+  monthly_amount: number;
+  horizon_years: number;
+  split: FundAllocation[];
+  schemes: FundRecommendation[];
+  expected_return_range: number[];
+  notes: string[];
+  generated_at: string;
+  data_as_of: string | null;
+  source: string;
+}
+
+export interface FundComparison {
+  codes: number[];
+  schemes: FundScheme[];
+  generated_at: string;
+}
+
+export interface FundDetail {
+  scheme: FundScheme;
+  history: { date: string; nav: number }[];
+  is_nfo: boolean;
+  generated_at: string;
+}
+
+export interface SipResult {
+  mode: string;
+  monthly_amount: number;
+  lumpsum_amount: number;
+  years: number;
+  step_up_pct: number;
+  assumed_return_pct: number;
+  invested: number;
+  future_value: number;
+  table: { year: number; invested: number; value: number }[];
+}
+
+export interface FundStatus {
+  enabled: boolean;
+  source: string;
+  data_as_of: string | null;
+  universe_size: number;
+  categories: { value: FundCategory; label: string }[];
+  note: string;
+}
+
+/* -------------------------------- Pro / Billing ----------------------------- */
+
+export type PlanInterval = "month" | "year";
+export type SubscriptionStatus =
+  | "none"
+  | "trial"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "expired";
+
+export interface BillingPlan {
+  id: "pro_monthly" | "pro_yearly";
+  name: string;
+  interval: PlanInterval;
+  price_inr: number;
+  price_usd: number;
+  currency: string;
+  description: string;
+  features: string[];
+  highlighted?: boolean;
+  trial_days?: number;
+}
+
+export interface CheckoutSession {
+  session_id: string;
+  plan_id: string;
+  status: string;
+  gateway: string;
+  amount_inr: number | null;
+  confirm_url: string | null;
+  expires_at: string | null;
+}
+
+export interface SubscriptionInfo {
+  tier: "free" | "pro";
+  plan_id: string | null;
+  status: SubscriptionStatus;
+  started_at: string | null;
+  renews_at: string | null;
+  canceled_at: string | null;
+  is_active: boolean;
+  gateway: string | null;
+}
+
+export interface Entitlements {
+  tier: "free" | "pro";
+  is_pro: boolean;
+  plan_id: string | null;
+  status: SubscriptionStatus;
+  renews_at: string | null;
+  features: Record<string, boolean>;
+  limits: Record<string, number>;
+}
+
+export interface SavedScreen {
+  screen_id: string;
+  user_id: string;
+  name: string;
+  filter_expr: string;
+  sort_by: string;
+  sort_dir: string;
+  limit: number;
+  created_at: string;
+  updated_at: string;
+  alert_enabled: boolean;
+  alert_email: string | null;
+  last_alert_at: string | null;
+  last_match_count: number;
+}
+
+export interface AlertEvaluation {
+  screen: SavedScreen;
+  matched: Record<string, unknown>[];
+  new_matches: number;
+  email_sent: boolean;
+  evaluated_at: string;
+}
+
+export interface PortfolioHolding {
+  symbol: string;
+  name: string | null;
+  sector: string;
+  price: number;
+  score: number | null;
+  action: Action | null;
+  risk_badge: string | null;
+  pe: number | null;
+  roe: number | null;
+  quantity: number;
+  value: number;
+  unrealized_pnl: number;
+  weight: number;
+}
+
+export interface PortfolioAnalytics {
+  total_value: number;
+  total_cost: number;
+  total_unrealized_pnl: number;
+  unrealized_pnl_pct: number | null;
+  weighted_dividend_yield: number;
+  avg_signal_score: number | null;
+  holdings_count: number;
+  concentration_herfindahl: number;
+  sector_exposure: { sector: string; value: number; weight: number }[];
+  holdings: PortfolioHolding[];
+}
+
+export interface StrategyBacktestHorizon {
+  horizon_days: number;
+  n: number;
+  hit_rate: number | null;
+  avg_return: number | null;
+  avg_win: number | null;
+  avg_loss: number | null;
+  max_drawdown: number | null;
+  benchmark_avg_return: number | null;
+  vs_benchmark: number | null;
+  by_action: Record<Action, { n: number; correct: number }> | null;
+}
+
+export interface StrategyBacktest {
+  strategy: string;
+  generated_at: string;
+  window_start: string;
+  window_end: string;
+  universe: string[];
+  universe_size: number;
+  signals: number;
+  per_symbol: Record<
+    string,
+    { signals: number; action_split: Record<Action, number> }
+  >;
+  horizons: StrategyBacktestHorizon[];
+  methodology: string[];
+  notes: string[];
+}
+
+/* ------------------- Learn moat, scorecard & stories (Phase 5) -------------- */
+
+export interface ArticleSummary {
+  slug: string;
+  title: string;
+  tagline: string;
+  category: string;
+  reading_minutes: number;
+  word_count: number;
+  excerpt: string;
+  related_slugs: string[];
+  updated_at: string;
+}
+
+export interface ArticleSection {
+  heading: string;
+  body: string;
+  bullets: string[];
+}
+
+export interface Article extends ArticleSummary {
+  seo_meta: Record<string, string>;
+  sections: ArticleSection[];
+  published: boolean;
+}
+
+export interface ScorecardHorizon {
+  horizon_days: number;
+  n: number;
+  hit_rate: number | null;
+  avg_return: number | null;
+  benchmark_avg_return: number | null;
+  vs_benchmark: number | null;
+  max_drawdown: number | null;
+}
+
+export interface MonthlyScorecard {
+  period: string;
+  generated_at: string;
+  source: string;
+  universe_size: number;
+  window_start: string | null;
+  window_end: string | null;
+  horizons: ScorecardHorizon[];
+  live_evaluated: number | null;
+  live_overall_hit_rate: number | null;
+  benchmark_symbol: string | null;
+  methodology: string[];
+  notes: string[];
+  disclaimer: string;
+}
+export interface SuccessStory {
+  id: string;
+  kind: string;
+  title: string;
+  persona: string;
+  walkthrough: string;
+  lesson: string;
+  illustrative: boolean;
+}
+
+/* ----------------------------- Alerts (Phase 5) ----------------------------- */
+
+export type AlertRuleType = "price" | "screen_hit" | "mf_nav";
+
+export interface AlertRule {
+  alert_id: string;
+  user_id: string;
+  rule_type: AlertRuleType;
+  name: string;
+  symbol: string | null;
+  scheme_code: string | null;
+  direction: "above" | "below";
+  trigger_value: number;
+  screen_id: string | null;
+  last_fired_at: string | null;
+  last_value: number | null;
+  created_at: string;
+  enabled: boolean;
+}
+
+export interface FiredAlert {
+  alert_id: string;
+  rule_type: AlertRuleType;
+  name: string;
+  symbol: string | null;
+  scheme_code: string | null;
+  value: number;
+  trigger_value: number;
+  direction: string;
+  fired_at: string;
+}
+
+/* -------------------- Check-before-buy (Phase 5) ---------------------------- */
+
+export interface BrokerLink {
+  id: string;
+  name: string;
+}
+
+export interface CheckItem {
+  title: string;
+  text: string;
+  level: "green" | "amber" | "red" | "info";
+  guidance: string;
+}
+
+export interface CheckBeforeBuy {
+  symbol: string;
+  price: number;
+  action: Action;
+  score: number;
+  risk_badge: string | null;
+  verdict: "green" | "amber";
+  items: CheckItem[];
+  brokers: BrokerLink[];
+  generated_at: string;
+  disclaimer: string;
+}
+
+/* --------------------------- Feedback loop (Phase 5) ------------------------ */
+
+export interface OutcomeBand {
+  n: number;
+  hit_rate: number | null;
+  avg_return_pct: number | null;
+}
+
+export interface FeedbackOutcomes {
+  evaluated: number;
+  overall_hit_rate: number | null;
+  by_score_band: Record<string, OutcomeBand>;
+  by_action: Record<string, OutcomeBand>;
+  score_predictiveness: number | null;
+  horizon_days: number | null;
+  window_start: string | null;
+  generated_at: string;
+}
+
+export interface WeightSuggestion {
+  pillar: string;
+  current_weight: number;
+  suggested_weight: number;
+  direction: string;
+  reason: string;
+}
+
+export interface FeedbackSuggestions {
+  sufficient_data: boolean;
+  evaluated: number;
+  score_predictiveness: number | null;
+  suggestions: WeightSuggestion[];
+  message: string;
+  pillar_totals: Record<string, number>;
+  generated_at: string;
+}
+
+export interface ChangelogEntry {
+  entry_id: string;
+  version: string;
+  date: string;
+  title: string;
+  summary: string;
+  weight_changes: Record<string, Record<string, unknown>>;
+  published: boolean;
 }
