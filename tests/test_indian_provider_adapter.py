@@ -144,13 +144,24 @@ def test_service_envelope_reports_gateway_provider(monkeypatch):
 # indian_api adapter: common-key normalisation
 # --------------------------------------------------------------------------- #
 def test_indian_api_history_points_are_normalized():
-    session = FakeSession(FakeResponse([{"timestamp": "2026-01-01", "price": 100, "volume": 5}]))
+    session = FakeSession(FakeResponse({"datasets": [
+        {"metric": "Price", "label": "Price on NSE", "values": [
+            ["2026-01-01", "100"], ["2026-01-02", "101"],
+        ]},
+        {"metric": "Volume", "label": "Volume", "values": [
+            ["2026-01-01", 5], ["2026-01-02", 6],
+        ]},
+    ]}))
     api = IndianApiClient(IndianApiConfig(enabled=True, api_key="k"), session=session)
-    series = api.history("RELIANCE")
+    series = api.history("RELIANCE", period="1y")
     point = series.points[0]
     assert point["date"] == "2026-01-01"
     assert point["close"] == 100
-    assert point["timestamp"] == "2026-01-01"  # original key preserved
+    assert point["volume"] == 5
+    assert point["open"] == point["high"] == point["low"] == point["close"]
+    assert session.calls[0]["params"] == {
+        "stock_name": "RELIANCE", "filter": "default", "period": "1yr"
+    }
 
 
 # --------------------------------------------------------------------------- #

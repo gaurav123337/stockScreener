@@ -70,15 +70,26 @@ def _indian_provider() -> IndianDataProvider:
     )
     session = FakeSession({
         "stock": FakeResponse({
-            "tickerId": "RELIANCE", "companyName": "Reliance Industries Limited",
-            "industry": "Conglomerate", "currentPrice": {"NSE": "2,195.75"},
-            "percentChange": "1.25%", "yearHigh": "2,400", "yearLow": "2,000",
+            "companyName": "Reliance Industries Limited",
+            "currentPrice": {"NSE": "2,195.75"},
+            "percentChange": "1.25%",
+            "companyProfile": {"mgIndustry": "Conglomerate"},
+            "stockDetailsReusableData": {
+                "yhigh": "2,400", "ylow": "2,000", "marketCap": "1500000000000",
+            },
+            "keyMetrics": {"valuation": [
+                {"key": "pPerEBasicExcludingExtraordinaryItemsTTM", "value": "23.7"},
+            ]},
         }),
-        "historical_data": FakeResponse([
-            {"date": "2026-01-01", "open": 100, "high": 105, "low": 99, "close": 104, "volume": 1000},
-            {"date": "2026-01-02", "open": 104, "high": 106, "low": 102, "close": 105, "volume": 1200},
-        ]),
-        "historical_stats": FakeResponse({"trailingPE": 23.7, "marketCap": 1500000000000}),
+        "historical_data": FakeResponse({"datasets": [
+            {"metric": "Price", "label": "Price on NSE", "values": [
+                ["2026-01-01", "104"], ["2026-01-02", "105"],
+            ]},
+            {"metric": "Volume", "label": "Volume", "values": [
+                ["2026-01-01", 1000], ["2026-01-02", 1200],
+            ]},
+        ]}),
+        "historical_stats": FakeResponse({"profit_loss_stats": []}),
     })
     return IndianDataProvider(client=IndianApiClient(settings, session=session))
 
@@ -102,9 +113,9 @@ def test_indian_provider_fetch_history_builds_ohlcv_frame():
     assert float(df["Close"].iloc[-1]) == 105.0
 
 
-def test_indian_provider_fetch_history_returns_none_on_missing_ticker():
+def test_indian_provider_fetch_history_returns_none_on_empty_datasets():
     settings = IndianApiConfig(enabled=True, base_url="https://api.example.test", api_key="k", cache_ttl_seconds=0)
-    session = FakeSession({"stock": FakeResponse({})})
+    session = FakeSession({"historical_data": FakeResponse({"datasets": []})})
     provider = IndianDataProvider(client=IndianApiClient(settings, session=session))
     assert provider.fetch_history("NOPE") is None
 
@@ -117,6 +128,7 @@ def test_indian_provider_fetch_info_merges_fundamentals():
     assert info["currentPrice"] == 2195.75
     assert info["trailingPE"] == 23.7
     assert info["fiftyTwoWeekHigh"] == 2400
+    assert info["marketCap"] == 1500000000000
 
 
 # --------------------------------------------------------------------------- #

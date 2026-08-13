@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from screener.core.models import RiskLevel
 
@@ -102,6 +102,7 @@ class FundScheme(BaseModel):
     source: str = "amfi"
     error: str | None = None
 
+    @computed_field
     @property
     def badges(self) -> list[str]:
         """Plain-language badges shown on cards (ELSS, direct, etc.)."""

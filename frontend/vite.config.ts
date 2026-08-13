@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath, URL } from "node:url";
 
-const API_TARGET = process.env.VITE_DEV_API_PROXY ?? "http://localhost:8000";
+const API_TARGET = process.env.VITE_DEV_API_PROXY ?? "http://127.0.0.1:8175";
 
 export default defineConfig({
   plugins: [

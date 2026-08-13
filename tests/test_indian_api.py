@@ -44,26 +44,89 @@ def client(session: FakeSession, **overrides) -> IndianApiClient:
     return IndianApiClient(settings, session=session)
 
 
-def test_stock_maps_numeric_strings_and_keeps_provider_raw_payload():
+def test_stock_maps_new_contract_and_keeps_provider_raw_payload():
     session = FakeSession(FakeResponse({
-        "tickerId": "RELIANCE",
-        "companyName": "Reliance Industries Limited",
-        "industry": "Conglomerate",
+        "companyName": "Reliance Industries",
         "currentPrice": {"NSE": "2,195.75", "BSE": 2200.5, "unknown": None},
         "percentChange": "1.25%",
-        "yearHigh": "2,400",
-        "yearLow": None,
+        "companyProfile": {
+            "mgIndustry": "Oil & Gas Operations",
+            "peerCompanyList": [{"tickerId": "S0003030"}],
+        },
+        "stockDetailsReusableData": {"yhigh": "2,400", "ylow": None},
+        "stockCorporateActionData": {"dividend": [{"tickerId": "S0003018"}]},
     }))
 
     result = client(session).stock(" Reliance ")
 
-    assert result.ticker_id == "RELIANCE"
+    assert result.ticker_id == "S0003018"
+    assert result.company_name == "Reliance Industries"
+    assert result.industry == "Oil & Gas Operations"
     assert result.current_price == {"NSE": 2195.75, "BSE": 2200.5}
     assert result.percent_change == 1.25
-    assert result.raw["tickerId"] == "RELIANCE"
+    assert result.year_high == 2400.0
+    assert result.raw["companyName"] == "Reliance Industries"
     assert session.calls[0]["url"].endswith("/stock")
     assert session.calls[0]["params"] == {"name": "Reliance"}
     assert session.calls[0]["headers"]["X-Api-Key"] == "secret-do-not-return"
+
+
+def test_stock_falls_back_to_name_when_ticker_id_is_nested_missing():
+    session = FakeSession(FakeResponse({
+        "companyName": "TCS",
+        "companyProfile": {"mgIndustry": "Software"},
+        "currentPrice": {"NSE": 4200.0},
+    }))
+    result = client(session).stock("tcs")
+    assert result.ticker_id == "TCS"
+    assert result.industry == "Software"
+
+
+def test_history_maps_datasets_to_ohlcv_points():
+    session = FakeSession(FakeResponse({
+        "datasets": [
+            {"metric": "Price", "label": "Price on NSE", "values": [
+                ["2025-08-13", "1382.60"], ["2025-08-14", "1373.80"],
+            ]},
+            {"metric": "DMA50", "label": "50 DMA", "values": [
+                ["2025-08-13", "1422.75"], ["2025-08-14", "1420.83"],
+            ]},
+            {"metric": "Volume", "label": "Volume", "values": [
+                ["2025-08-13", 7826188, {"delivery": 65}],
+                ["2025-08-14", 7573899, {"delivery": 53}],
+            ]},
+        ]
+    }))
+    api = client(session)
+    series = api.history("RELIANCE", period="1y")
+
+    assert session.calls[0]["params"] == {
+        "stock_name": "RELIANCE", "filter": "default", "period": "1yr"
+    }
+    assert len(series.points) == 2
+    point = series.points[0]
+    assert point["date"] == "2025-08-13"
+    assert point["close"] == pytest.approx(1382.6)
+    assert point["open"] == point["high"] == point["low"] == point["close"]
+    assert point["volume"] == 7826188
+    assert series.points[1]["volume"] == 7573899
+
+
+def test_history_period_tokens_map_onto_live_enum():
+    assert IndianApiClient._map_history_period("1d") == "1m"
+    assert IndianApiClient._map_history_period("6mo") == "6m"
+    assert IndianApiClient._map_history_period("1y") == "1yr"
+    assert IndianApiClient._map_history_period("2y") == "3yr"
+    assert IndianApiClient._map_history_period("10y") == "10yr"
+    assert IndianApiClient._map_history_period("bogus") == "1yr"
+
+
+def test_historical_stats_uses_stock_name_and_stats_param():
+    session = FakeSession(FakeResponse({"profit_loss_stats": []}))
+    api = client(session)
+    stats = api.historical_stats("RELIANCE", stats="all")
+    assert stats.stats == {"profit_loss_stats": []}
+    assert session.calls[0]["params"] == {"stock_name": "RELIANCE", "stats": "all"}
 
 
 def test_identical_requests_use_ttl_cache():

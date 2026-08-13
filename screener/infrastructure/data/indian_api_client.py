@@ -159,16 +159,52 @@ class IndianApiClient(IndianMarketGateway):
 
     def stock(self, name: str) -> StockSummary:
         payload = self._request("stock", {"name": name.strip()})
-        if not isinstance(payload, dict) or not payload.get("tickerId"):
+        if not isinstance(payload, dict):
             raise DataSourceError("Indian market API returned an invalid stock response")
-        prices = payload.get("currentPrice") or {}
+        profile = payload.get("companyProfile") or {}
+        details = payload.get("stockDetailsReusableData") or {}
         return StockSummary(
-            ticker_id=str(payload["tickerId"]), company_name=payload.get("companyName"),
-            industry=payload.get("industry"), current_price=self._numbers(prices),
-            percent_change=self._number(payload.get("percentChange")),
-            year_high=self._number(payload.get("yearHigh")), year_low=self._number(payload.get("yearLow")),
+            ticker_id=self._extract_ticker_id(payload) or name.strip().upper(),
+            company_name=payload.get("companyName"),
+            industry=profile.get("mgIndustry"),
+            current_price=self._numbers(payload.get("currentPrice") or {}),
+            percent_change=self._number(payload.get("percentChange") or details.get("percentChange")),
+            year_high=self._number(details.get("yhigh") or details.get("high")),
+            year_low=self._number(details.get("ylow") or details.get("low")),
             raw=payload,
         )
+
+    @staticmethod
+    def _extract_ticker_id(payload: dict) -> str | None:
+        """The live API nests ``tickerId`` inside sub-resources."""
+        corporate = payload.get("stockCorporateActionData") or {}
+        for key in ("dividend", "bonus", "annualGeneralMeeting", "boardMeetings"):
+            items = corporate.get(key) or []
+            if items and isinstance(items[0], dict) and items[0].get("tickerId"):
+                return str(items[0]["tickerId"])
+        for section in (payload.get("companyProfile") or {}, payload.get("stockDetailsReusableData") or {}):
+            peers = section.get("peerCompanyList") or []
+            if peers and isinstance(peers[0], dict) and peers[0].get("tickerId"):
+                return str(peers[0]["tickerId"])
+        return None
+
+    def flatten_metrics(self, payload: dict) -> dict[str, Any]:
+        """Flatten ``keyMetrics`` sections + reusable-data scalars onto one dict."""
+        out: dict[str, Any] = {}
+        metrics = payload.get("keyMetrics") or {}
+        if isinstance(metrics, dict):
+            for section in metrics.values():
+                if not isinstance(section, list):
+                    continue
+                for item in section:
+                    if isinstance(item, dict) and item.get("key") is not None:
+                        out[str(item["key"])] = item.get("value")
+        details = payload.get("stockDetailsReusableData") or {}
+        if isinstance(details, dict):
+            for key, value in details.items():
+                if key not in out and not isinstance(value, (list, dict)):
+                    out[str(key)] = value
+        return out
 
     def search(self, endpoint: str, query: str) -> list[dict[str, Any]]:
         payload = self._request(endpoint, {"query": query.strip()})
@@ -178,43 +214,78 @@ class IndianApiClient(IndianMarketGateway):
         return self._request(endpoint)
 
     def history(self, stock_id: str, **params: str) -> HistoricalSeries:
-        payload = self._request("historical_data", {"stock_id": stock_id, **params})
+        period = self._map_history_period(str(params.get("period") or "1yr"))
+        filter_ = str(params.get("filter") or "default")
+        payload = self._request("historical_data", {
+            "stock_name": stock_id, "filter": filter_, "period": period,
+        })
         return HistoricalSeries(
             stock_id=stock_id,
-            points=self._normalize_points(payload if isinstance(payload, list) else []),
+            points=self._points_from_datasets(payload if isinstance(payload, dict) else {}),
         )
 
     @staticmethod
-    def _normalize_points(points: list[Any]) -> list[dict[str, Any]]:
-        """Map provider-specific point keys onto the common OHLCV contract.
+    def _map_history_period(period: str) -> str:
+        """Map provider period tokens onto the live API's enum.
 
-        Unknown keys are preserved so no information is dropped; canonical keys
-        are added from common aliases when the provider uses different names.
+        The API accepts 1m | 6m | 1yr | 3yr | 5yr | 10yr. ``default`` is the
+        nearest bucket that covers the requested lookback.
         """
-        alias_sets = {
-            "date": ("date", "timestamp", "datetime", "time"),
-            "open": ("open", "Open"),
-            "high": ("high", "High"),
-            "low": ("low", "Low"),
-            "close": ("close", "Close", "price", "last"),
-            "volume": ("volume", "Volume", "vol"),
+        key = str(period).lower().replace(" ", "")
+        mapping = {
+            "1d": "1m", "1w": "1m", "1m": "1m",
+            "1mo": "1m", "3mo": "6m", "6mo": "6m",
+            "1y": "1yr", "2y": "3yr", "3y": "3yr",
+            "5y": "5yr", "10y": "10yr",
         }
-        out: list[dict[str, Any]] = []
-        for point in points:
-            if not isinstance(point, dict):
-                out.append(point)
+        return mapping.get(key, "1yr")
+
+    @classmethod
+    def _points_from_datasets(cls, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        """Map the new ``{datasets: [...]}`` shape onto OHLCV points.
+
+        The live API only exposes close prices (plus Volume and DMA bands), so
+        each point is synthesised as ``open == high == low == close`` with the
+        matching volume. This keeps the common-key OHLCV contract intact.
+        """
+        datasets = payload.get("datasets") or []
+        price_rows: list[list[Any]] = []
+        volume_by_date: dict[str, Any] = {}
+        for ds in datasets:
+            if not isinstance(ds, dict) or not isinstance(ds.get("values"), list):
                 continue
-            item = dict(point)
-            for canon, aliases in alias_sets.items():
-                for alias in aliases:
-                    if alias in item:
-                        item.setdefault(canon, item[alias])
-                        break
-            out.append(item)
-        return out
+            metric = str(ds.get("metric") or "").lower()
+            values = ds["values"]
+            if metric == "price":
+                price_rows = values
+            elif metric == "volume":
+                for row in values:
+                    if isinstance(row, (list, tuple)) and len(row) >= 2:
+                        volume_by_date[str(row[0])] = row[1]
+        points: list[dict[str, Any]] = []
+        for row in price_rows:
+            if not isinstance(row, (list, tuple)) or len(row) < 2:
+                continue
+            close = cls._number(row[1])
+            if close is None:
+                continue
+            date = str(row[0])
+            points.append({
+                "date": date,
+                "open": close,
+                "high": close,
+                "low": close,
+                "close": close,
+                "volume": volume_by_date.get(date),
+            })
+        return points
 
     def historical_stats(self, stock_id: str, **params: str) -> HistoricalStats:
-        return HistoricalStats(stock_id=stock_id, stats=self._request("historical_stats", {"stock_id": stock_id, **params}))
+        stats_type = str(params.get("stats") or "all")
+        return HistoricalStats(
+            stock_id=stock_id,
+            stats=self._request("historical_stats", {"stock_name": stock_id, "stats": stats_type}),
+        )
 
     def analysis(self, endpoint: str, stock_id: str, **params: str) -> Any:
         if endpoint not in {"stock_target_price", "stock_forecasts", "mutual_funds"}:
