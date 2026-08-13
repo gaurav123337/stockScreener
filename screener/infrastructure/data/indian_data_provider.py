@@ -6,9 +6,12 @@ be backed by the Indian API instead of Yahoo. It mirrors the degrade-gracefully
 pattern of ``YahooIndianProvider``: endpoints the API cannot serve return
 empty/None rather than breaking the contract.
 
-The Indian API resolves symbols by name to a ``ticker_id``, so history and
-stats lookups make one extra resolution call per symbol. Results are not
-cached to disk here — the client keeps a short TTL in-memory cache.
+The live API resolves symbols by bare NSE name (``stock_name``) rather than a
+numeric id, so history and stats lookups need no extra resolution call. The
+``/historical_data`` endpoint only exposes close prices (plus Volume and DMA
+bands), so history rows are synthesised with ``open == high == low == close``.
+Results are not cached to disk here — the client keeps a short TTL in-memory
+cache.
 """
 from __future__ import annotations
 
@@ -21,23 +24,20 @@ from screener.core.interfaces import MarketDataProvider
 from screener.infrastructure.data.indian_api_client import IndianApiClient
 from screener.infrastructure.data.nse_master import NseMasterStore
 
-_PERIOD_MAP = {
-    "1d": "1D",
-    "5d": "1W",
-    "1mo": "1M",
-    "3mo": "3M",
-    "6mo": "6M",
-    "1y": "1Y",
-    "2y": "2Y",
-    "5y": "5Y",
-    "10y": "10Y",
+_INFO_METRIC_KEYS = {
+    "marketCap": ("marketCap",),
+    "trailingPE": ("pPerEBasicExcludingExtraordinaryItemsTTM", "pPerEExcludingExtraordinaryItemsMostRecentFiscalYear"),
+    "forwardPE": (),
+    "pegRatio": ("pegRatio",),
+    "priceToBook": ("priceToBookMostRecentQuarter", "priceToBookMostRecentFiscalYear"),
+    "returnOnEquity": ("returnOnAverageEquityTrailing12Month", "returnOnAverageEquityMostRecentFiscalYear"),
+    "debtToEquity": ("totalDebtPerTotalEquityMostRecentQuarter", "lTDebtPerEquityMostRecentQuarter"),
+    "profitMargins": ("netProfitMarginPercentTrailing12Month", "netProfitMargin5YearAverage"),
+    "revenueGrowth": ("revenueGrowthRate5Year",),
+    "earningsGrowth": ("ePSChangePercentTTMOverTTM",),
+    "dividendYield": ("currentDividendYieldCommonStockPrimaryIssueLTM", "dividendYield5YearAverage"),
+    "beta": ("beta",),
 }
-
-_INFO_KEYS = (
-    "marketCap", "trailingPE", "forwardPE", "pegRatio", "priceToBook",
-    "returnOnEquity", "debtToEquity", "profitMargins", "revenueGrowth",
-    "earningsGrowth", "dividendYield", "beta",
-)
 
 
 class IndianDataProvider(MarketDataProvider):
@@ -64,27 +64,15 @@ class IndianDataProvider(MarketDataProvider):
                 return s[: -len(suffix)]
         return s
 
-    @staticmethod
-    def _map_period(period: str | None) -> str:
-        return _PERIOD_MAP.get(str(period or "1y").lower(), str(period or "1Y").upper())
-
-    def _ticker_id(self, symbol: str) -> str | None:
-        try:
-            return self._client.stock(self.normalize_symbol(symbol)).ticker_id
-        except Exception:
-            return None
-
     def fetch_history(
         self,
         symbol: str,
         period: str = "1y",
         interval: str = "1d",
     ) -> pd.DataFrame | None:
-        ticker_id = self._ticker_id(symbol)
-        if not ticker_id:
-            return None
+        bare = self.normalize_symbol(symbol)
         try:
-            series = self._client.history(ticker_id, period=self._map_period(period))
+            series = self._client.history(bare, period=period)
         except Exception:
             return None
         points = series.points
@@ -122,22 +110,31 @@ class IndianDataProvider(MarketDataProvider):
                 info["fiftyTwoWeekHigh"] = summary.year_high
             if summary.year_low is not None:
                 info["fiftyTwoWeekLow"] = summary.year_low
+            try:
+                metrics = self._client.flatten_metrics(summary.raw)
+                for canonical, aliases in _INFO_METRIC_KEYS.items():
+                    for alias in aliases:
+                        value = self._to_number(metrics.get(alias))
+                        if value is not None:
+                            info.setdefault(canonical, value)
+                            break
+            except Exception:
+                pass
         row = self._nse.lookup(bare)
         if row:
             info.setdefault("longName", row["name"] or None)
             info.setdefault("sector", row["industry"] or None)
             info.setdefault("industry", row["industry"] or None)
-        ticker_id = summary.ticker_id if summary is not None else self._ticker_id(bare)
-        if ticker_id:
-            try:
-                stats = self._client.historical_stats(ticker_id).stats
-                if isinstance(stats, dict):
-                    for key in _INFO_KEYS:
-                        if stats.get(key) is not None:
-                            info.setdefault(key, stats[key])
-            except Exception:
-                pass
         return info
+
+    @staticmethod
+    def _to_number(value: Any) -> float | None:
+        if value is None or value == "":
+            return None
+        try:
+            return float(str(value).replace(",", "").replace("%", ""))
+        except (TypeError, ValueError):
+            return None
 
     def history_updated_at(self):
         return None

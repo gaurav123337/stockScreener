@@ -2,7 +2,7 @@ import { clearAuth, getStoredUser, getToken, setStoredUser, setToken } from "@/a
 import { api } from "@/api/endpoints";
 import { queryClient } from "@/app/queryClient";
 import type { UserProfile } from "@/types/api";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AuthContext, type AuthContextValue } from "./auth-context";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -24,6 +24,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return null;
   });
+
+  // Validate stored token on mount to prevent stale sessions from rendering
+  // a "logged-in" shell that then 401-bounces to the sign-in screen.
+  useEffect(() => {
+    if (getToken()) {
+      refreshUser();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isLoggedIn = user !== null && user.username !== "guest";
   const isGuest = !isLoggedIn;

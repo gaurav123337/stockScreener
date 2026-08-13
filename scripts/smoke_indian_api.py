@@ -27,6 +27,8 @@ def main() -> int:
     checks: list[tuple[str, object]] = [("trending", lambda: client.snapshot("trending"))]
     if args.stock:
         checks.append(("stock", lambda: client.stock(args.stock)))
+        checks.append(("history", lambda: client.history(args.stock, period="1y")))
+        checks.append(("stats", lambda: client.historical_stats(args.stock, stats="all")))
 
     failures: list[str] = []
     for name, check in checks:
