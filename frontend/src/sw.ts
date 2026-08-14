@@ -12,6 +12,10 @@ declare const self: ServiceWorkerGlobalScope;
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
+// Versioned runtime cache so a new deploy's SW purges stale chunks instead
+// of serving old hashed assets (which would break lazy `import()`).
+const RUNTIME_CACHE = "screener-runtime-v1";
+
 self.addEventListener("install", () => {
   void self.skipWaiting();
 });
@@ -19,6 +23,12 @@ self.addEventListener("install", () => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames
+          .filter((name) => name.startsWith("screener-runtime") && name !== RUNTIME_CACHE)
+          .map((name) => caches.delete(name)),
+      );
       await self.clients.claim();
       const windows = await self.clients.matchAll({ type: "window" });
       for (const win of windows) win.postMessage({ type: "SW_UPDATED" });
@@ -37,8 +47,20 @@ self.addEventListener("fetch", (event) => {
     fetch(event.request)
       .then((response) => {
         if (event.request.method === "GET" && response.ok) {
-          const copy = response.clone();
-          void caches.open("screener-runtime").then((cache) => cache.put(event.request, copy));
+          // Never cache an HTML document under an asset URL — a stale
+          // index.html referencing an old hashed chunk would otherwise
+          // receive HTML for a JS import and fail at runtime.
+          const isDocument = event.request.mode === "navigate";
+          const isHtmlAsset =
+            !isDocument &&
+            (event.request.destination === "script" ||
+              event.request.destination === "style" ||
+              /\.(js|css|mjs)(\?.*)?$/.test(event.request.url));
+          const contentType = response.headers.get("content-type") ?? "";
+          if (!isHtmlAsset || !contentType.includes("text/html")) {
+            const copy = response.clone();
+            void caches.open(RUNTIME_CACHE).then((cache) => cache.put(event.request, copy));
+          }
         }
         return response;
       })

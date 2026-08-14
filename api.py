@@ -1788,7 +1788,7 @@ def manifest():
 
 @app.get("/sw.js")
 def service_worker():
-    return FileResponse(WEB / "sw.js", media_type="application/javascript")
+    return FileResponse(WEB / "sw.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/{full_path:path}")
@@ -1798,8 +1798,20 @@ def spa(full_path: str):
     # serve real files if they exist (css/js/icons), else index.html (SPA routing)
     candidate = WEB / full_path
     if full_path and candidate.exists() and candidate.is_file():
-        return FileResponse(candidate)
-    return FileResponse(WEB / "index.html")
+        headers = {}
+        # Hashed build assets are immutable; index.html/sw.js must revalidate.
+        if full_path.startswith("assets/") and Path(full_path).suffix in {".js", ".css", ".svg", ".png", ".woff2", ".ico"}:
+            headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif full_path == "index.html":
+            headers["Cache-Control"] = "no-cache"
+        return FileResponse(candidate, headers=headers)
+    # A missing asset must 404, not fall back to index.html — otherwise a
+    # stale cached index.html referencing an old hashed chunk would receive
+    # HTML for a JS import and fail with "Failed to fetch dynamically
+    # imported module".
+    if full_path and Path(full_path).suffix:
+        raise NotFoundError(f"Asset '{full_path}' was not found")
+    return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 # Legacy vanilla SPA keeps its assets under web/static; the Vite build emits

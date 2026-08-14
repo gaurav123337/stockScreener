@@ -28,6 +28,45 @@ function trendingRows(value: IndianSnapshot | unknown): IndianRecord[] {
   return [...asRecords(groups.top_gainers), ...asRecords(groups.top_losers)];
 }
 
+function shockerRows(value: IndianSnapshot | unknown): IndianRecord[] {
+  const rows = asRecords(value);
+  if (rows.length !== 1) return rows;
+  const groups = rows[0] as IndianRecord;
+  return [
+    ...asRecords(groups.BSE_PriceShocker),
+    ...asRecords(groups.NSE_PriceShocker),
+  ];
+}
+
+function recordLabel(row: IndianRecord): string {
+  const label =
+    row.name ??
+    row.companyName ??
+    row.company_name ??
+    row.commonName ??
+    row.company ??
+    row.displayName ??
+    row.symbol ??
+    row.ticker ??
+    row.tickerId ??
+    row.nseCode ??
+    row.ric;
+  return typeof label === "string" ? label : "";
+}
+
+function recordValue(row: IndianRecord): string {
+  const value =
+    row.percentChange ??
+    row.percent_change ??
+    row.netChange ??
+    row.net_change ??
+    row.currentPrice ??
+    row.price ??
+    row.close ??
+    row.change;
+  return displayValue(value);
+}
+
 function displayValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "object") return JSON.stringify(value);
@@ -64,14 +103,8 @@ function SnapshotCard({
       {rows.length ? (
         <ul className="mt-3 space-y-2 text-sm">
           {rows.slice(0, 5).map((row, index) => {
-            const label =
-              row.name ??
-              row.companyName ??
-              row.commonName ??
-              row.symbol ??
-              row.tickerId ??
-              `Item ${index + 1}`;
-            const numeric = row.percentChange ?? row.change ?? row.currentPrice ?? row.price;
+            const label = recordLabel(row) || `Item ${index + 1}`;
+            const numeric = recordValue(row);
             return (
               <li
                 key={`${String(label)}-${index}`}
@@ -286,6 +319,7 @@ export default function IndianMarketPage() {
               title="Price shockers"
               value={snapshots.price_shockers}
               icon={TrendingDown}
+              records={shockerRows}
             />
           </div>
           <p className="mb-3 text-xs text-muted">
