@@ -361,7 +361,8 @@ class ControlCenterService:
             if isinstance(values, dict):
                 for key, value in values.items():
                     result.append({"key": f"{section}.{key}", "section": section, "label": key.replace("_", " ").title(),
-                                   "type": type(value).__name__, "default": value, "sensitive": False, "user_overridable": True})
+                                   "type": type(value).__name__, "default": value,
+                                   "sensitive": key == "api_key", "user_overridable": True})
             elif section == "default_universe":
                 result.append({"key": section, "section": "universe", "label": "Default Universe", "type": "list",
                                "default": values, "sensitive": False, "user_overridable": True})

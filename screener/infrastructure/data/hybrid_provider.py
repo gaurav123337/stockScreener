@@ -1,9 +1,9 @@
 """Hybrid implementation of MarketDataProvider.
 
-Yahoo is the primary source; the Indian API is the fallback. Each symbol
-fails over independently: if the primary cannot produce history or
-fundamentals, the fallback provider is tried before giving up. This keeps
-scans resilient when one provider is rate-limited or missing a listing.
+A primary source with an ordered set of fallbacks. Each symbol fails over
+independently: if a provider cannot produce history or fundamentals, the next
+one in the chain is tried before giving up. This keeps scans resilient when a
+provider is rate-limited or missing a listing.
 """
 from __future__ import annotations
 
@@ -15,25 +15,30 @@ from screener.core.interfaces import MarketDataProvider
 
 
 class HybridDataProvider(MarketDataProvider):
-    """Primary (Yahoo) with per-symbol fallback to a secondary provider."""
+    """Primary provider with per-symbol fallback to secondary provider(s)."""
 
     def __init__(
         self,
         primary: MarketDataProvider,
-        fallback: MarketDataProvider,
+        fallback: MarketDataProvider | None = None,
+        fallbacks: list[MarketDataProvider] | None = None,
     ):
-        self._primary = primary
-        self._fallback = fallback
+        providers: list[MarketDataProvider] = [primary]
+        if fallbacks:
+            providers.extend(fallbacks)
+        if fallback is not None:
+            providers.append(fallback)
+        self._providers = providers
 
     @property
     def provider_name(self) -> str:
         return "hybrid"
 
     def normalize_symbol(self, symbol: str) -> str:
-        return self._primary.normalize_symbol(symbol)
+        return self._providers[0].normalize_symbol(symbol)
 
     def resolve_symbol(self, symbol: str) -> str | None:
-        resolver = getattr(self._primary, "resolve_symbol", None)
+        resolver = getattr(self._providers[0], "resolve_symbol", None)
         if callable(resolver):
             return resolver(symbol)
         normalized = self.normalize_symbol(symbol)
@@ -45,25 +50,27 @@ class HybridDataProvider(MarketDataProvider):
         period: str = "1y",
         interval: str = "1d",
     ) -> pd.DataFrame | None:
-        df = self._primary.fetch_history(symbol, period=period, interval=interval)
-        if df is not None and not df.empty:
-            return df
-        try:
-            return self._fallback.fetch_history(symbol, period=period, interval=interval)
-        except Exception:
-            return None
+        for provider in self._providers:
+            try:
+                df = provider.fetch_history(symbol, period=period, interval=interval)
+            except Exception:
+                df = None
+            if df is not None and not df.empty:
+                return df
+        return None
 
     def fetch_info(self, symbol: str) -> dict[str, Any]:
-        info = self._primary.fetch_info(symbol)
-        if info:
-            return info
-        try:
-            return self._fallback.fetch_info(symbol) or {}
-        except Exception:
-            return {}
+        for provider in self._providers:
+            try:
+                info = provider.fetch_info(symbol) or {}
+            except Exception:
+                info = {}
+            if info:
+                return info
+        return {}
 
     def history_updated_at(self):
-        primary = getattr(self._primary, "history_updated_at", None)
+        primary = getattr(self._providers[0], "history_updated_at", None)
         if callable(primary):
             return primary()
         return None

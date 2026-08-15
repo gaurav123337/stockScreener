@@ -22,6 +22,10 @@ from screener import universe
 # `data/user_config.json` files created by older versions.
 _CONFIG_VERSION = 2
 
+# Leaf providers that can appear in ``provider_chain`` (chain/hybrid are
+# compositions, not leaves, so they are excluded from the chain).
+_PROVIDER_LEAF_NAMES = frozenset({"yahoo", "indian_api", "alphavantage", "fmp", "finnhub"})
+
 
 class DataConfig(BaseSettings):
     """Data fetching configuration."""
@@ -155,6 +159,41 @@ class MutualFundConfig(BaseSettings):
     risk_free_rate: float = Field(default=0.065, ge=0, le=0.20)
 
 
+class AlphaVantageConfig(BaseSettings):
+    """Free-tier Alpha Vantage configuration (stock data).
+
+    The free tier is limited to ~25 requests/day and 5/minute; requests that
+    exceed the quota return HTTP 200 with a ``Note``/``Information`` envelope,
+    which the provider treats as a miss so the failover chain can move on.
+    """
+    model_config = SettingsConfigDict(env_prefix="SCREENER_ALPHAVANTAGE_")
+
+    enabled: bool = True
+    api_key: str = Field(default="", repr=False)
+    base_url: str = "https://www.alphavantage.co/query"
+    timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+
+
+class FmpConfig(BaseSettings):
+    """Financial Modeling Prep configuration (free tier, daily limit)."""
+    model_config = SettingsConfigDict(env_prefix="SCREENER_FMP_")
+
+    enabled: bool = True
+    api_key: str = Field(default="", repr=False)
+    base_url: str = "https://financialmodelingprep.com/stable"
+    timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+
+
+class FinnhubConfig(BaseSettings):
+    """Finnhub configuration (free tier, capped at 60 calls/minute)."""
+    model_config = SettingsConfigDict(env_prefix="SCREENER_FINNHUB_")
+
+    enabled: bool = True
+    api_key: str = Field(default="", repr=False)
+    base_url: str = "https://finnhub.io/api/v1"
+    timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+
+
 class BillingConfig(BaseSettings):
     """Freemium / Pro subscription configuration (Phase 4)."""
     model_config = SettingsConfigDict(env_prefix="SCREENER_BILLING_")
@@ -238,7 +277,21 @@ class AppConfig(BaseSettings):
     push: PushConfig = Field(default_factory=PushConfig)
     indian_api: IndianApiConfig = Field(default_factory=IndianApiConfig)
     mutual_fund: MutualFundConfig = Field(default_factory=MutualFundConfig)
-    market_data_provider: Literal["yahoo", "indian_api", "hybrid"] = "yahoo"
+    alphavantage: AlphaVantageConfig = Field(default_factory=AlphaVantageConfig)
+    fmp: FmpConfig = Field(default_factory=FmpConfig)
+    finnhub: FinnhubConfig = Field(default_factory=FinnhubConfig)
+    # The adapter behind the whole screener. Free REST providers
+    # (alphavantage / fmp / finnhub) resolve through keyed HTTP endpoints;
+    # "chain" walks ``provider_chain`` in order, skipping providers that have
+    # no API key, so scans stay resilient when a free tier gets rate-limited.
+    market_data_provider: Literal[
+        "yahoo", "indian_api", "hybrid", "alphavantage", "fmp", "finnhub", "chain"
+    ] = "yahoo"
+    # Ordered fallback chain used when ``market_data_provider == "chain"``.
+    # Leaf providers without a configured API key are skipped automatically.
+    provider_chain: list[str] = Field(default_factory=lambda: [
+        "fmp", "alphavantage", "finnhub", "yahoo",
+    ])
 
     # Which adapter backs the Indian market workspace. Both providers conform
     # to the same gateway contract, so this is the only switch that changes.
@@ -343,6 +396,9 @@ class AppConfig(BaseSettings):
     # Dashboard-editable settings (get / update / reset)
     # ------------------------------------------------------------------ #
     _SECTIONS = ("data", "scoring", "risk", "knowledge", "verification", "compliance")
+    # Keyed provider sections are editable through the same dashboard flow.
+    _PROVIDER_SECTIONS = ("alphavantage", "fmp", "finnhub")
+    _DICT_SECTIONS = _SECTIONS + _PROVIDER_SECTIONS
 
     @classmethod
     def _defaults(cls) -> dict[str, Any]:
@@ -352,7 +408,7 @@ class AppConfig(BaseSettings):
     def editable_snapshot(self) -> dict[str, Any]:
         """Current values of every dashboard-editable setting."""
         snap: dict[str, Any] = {
-            section: getattr(self, section).model_dump() for section in self._SECTIONS
+            section: getattr(self, section).model_dump() for section in self._DICT_SECTIONS
         }
         # frozenset isn't JSON-friendly
         snap["knowledge"]["allowed_extensions"] = sorted(
@@ -361,6 +417,7 @@ class AppConfig(BaseSettings):
         snap["default_universe"] = list(self.default_universe)
         snap["market_data_provider"] = self.market_data_provider
         snap["indian_market_provider"] = self.indian_market_provider
+        snap["provider_chain"] = list(self.provider_chain)
         return snap
 
     def load_user_overrides(self) -> None:
@@ -419,11 +476,12 @@ class AppConfig(BaseSettings):
 
         # Type-validate by rebuilding the sub-configs
         validated: dict[str, Any] = {"default_universe": candidate["default_universe"]}
-        for section in self._SECTIONS:
+        for section in self._DICT_SECTIONS:
             model = type(getattr(self, section))
             validated[section] = model(**candidate[section]).model_dump()
         for field in ("market_data_provider", "indian_market_provider"):
             validated[field] = self._validate_enum(field, candidate[field])
+        validated["provider_chain"] = self._validate_chain(candidate.get("provider_chain"))
 
         self._apply(validated)
         self._persist(self.editable_snapshot())
@@ -440,7 +498,7 @@ class AppConfig(BaseSettings):
         return self.editable_snapshot()
 
     def _apply(self, values: dict[str, Any]) -> None:
-        for section in self._SECTIONS:
+        for section in self._DICT_SECTIONS:
             if section in values:
                 model = type(getattr(self, section))
                 setattr(self, section, model(**values[section]))
@@ -454,6 +512,25 @@ class AppConfig(BaseSettings):
             self.indian_market_provider = self._validate_enum(
                 "indian_market_provider", values["indian_market_provider"]
             )
+        if "provider_chain" in values:
+            self.provider_chain = self._validate_chain(values["provider_chain"])
+
+    @staticmethod
+    def _validate_chain(value: Any) -> list[str]:
+        """Validate the ordered ``provider_chain`` (leaf provider names only)."""
+        if not isinstance(value, (list, tuple, set)):
+            raise ValueError("provider_chain must be a list of provider names")
+        seen: list[str] = []
+        for entry in value:
+            name = str(entry).strip().lower()
+            if name not in _PROVIDER_LEAF_NAMES:
+                raise ValueError(
+                    f"invalid provider_chain entry: {entry!r} "
+                    f"(choose from {', '.join(sorted(_PROVIDER_LEAF_NAMES))})"
+                )
+            if name not in seen:
+                seen.append(name)
+        return seen
 
     @staticmethod
     def _validate_enum(field: str, value: Any) -> str:
