@@ -10,6 +10,12 @@ import { formatDate } from "./table-utils";
 
 type DiffEntry = { key: string; before: unknown; after: unknown };
 
+const PROVIDER_KEY_FIELDS = [
+  { section: "fmp", label: "Financial Modeling Prep" },
+  { section: "alphavantage", label: "Alpha Vantage" },
+  { section: "finnhub", label: "Finnhub" },
+];
+
 export default function ConfigPage() {
   const query = useQuery({ queryKey: ["admin", "config"], queryFn: api.currentGlobalConfig });
   const history = useQuery({ queryKey: ["admin", "config", "history"], queryFn: api.globalConfigHistory });
@@ -37,6 +43,27 @@ export default function ConfigPage() {
   function patchDraft(key: string, value: string) {
     const patch = readDraft();
     patch[key] = value;
+    setDraft(JSON.stringify(patch, null, 2));
+    setDiff(null);
+  }
+  function nestedValue(section: string, key: string): string {
+    const value = (readDraft()[section] as Record<string, unknown> | undefined)?.[key];
+    return typeof value === "string" ? value : "";
+  }
+  function patchNested(section: string, key: string, value: string) {
+    const patch = readDraft();
+    const sub = { ...((patch[section] as Record<string, unknown>) ?? {}), [key]: value };
+    patch[section] = sub;
+    setDraft(JSON.stringify(patch, null, 2));
+    setDiff(null);
+  }
+  function chainValue(): string {
+    const value = readDraft().provider_chain;
+    return Array.isArray(value) ? (value as string[]).join(", ") : "";
+  }
+  function patchChain(value: string) {
+    const patch = readDraft();
+    patch.provider_chain = value.split(",").map((part) => part.trim()).filter(Boolean);
     setDraft(JSON.stringify(patch, null, 2));
     setDiff(null);
   }
@@ -105,8 +132,37 @@ export default function ConfigPage() {
                     <option value="yahoo">Yahoo Finance</option>
                     <option value="indian_api">Indian API</option>
                     <option value="hybrid">Hybrid (Yahoo + Indian API fallback)</option>
+                    <option value="fmp">Financial Modeling Prep</option>
+                    <option value="alphavantage">Alpha Vantage</option>
+                    <option value="finnhub">Finnhub</option>
+                    <option value="chain">Failover chain (see provider_chain)</option>
                   </select>
                 </label>
+                <label className={`${labelClass} mt-4`}>
+                  Failover chain (comma-separated, tried in order)
+                  <input
+                    className={controlClass}
+                    value={chainValue()}
+                    onChange={(e) => patchChain(e.target.value)}
+                    placeholder="fmp, alphavantage, finnhub, yahoo"
+                  />
+                </label>
+                <p className="mt-3 text-xs text-muted">
+                  Chain members without a configured API key are skipped automatically.
+                </p>
+                {PROVIDER_KEY_FIELDS.map(({ section, label }) => (
+                  <label className={`${labelClass} mt-4`} key={section}>
+                    {label} API key
+                    <input
+                      className={controlClass}
+                      type="password"
+                      value={nestedValue(section, "api_key")}
+                      onChange={(e) => patchNested(section, "api_key", e.target.value)}
+                      placeholder="paste your free-tier key"
+                      autoComplete="off"
+                    />
+                  </label>
+                ))}
                 <label className={`${labelClass} mt-4`}>
                   Indian market workspace provider
                   <select

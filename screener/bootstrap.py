@@ -4,7 +4,7 @@ Import this module once (e.g., in api.py or main.py) before using services.
 """
 from __future__ import annotations
 
-from screener.core.config import config
+from screener.core.config import _PROVIDER_LEAF_NAMES, config
 from screener.core.container import container
 from screener.core.interfaces import (
     KnowledgeStore,
@@ -17,6 +17,9 @@ from screener.infrastructure.data.indian_api_client import IndianApiClient
 from screener.infrastructure.data.indian_data_provider import IndianDataProvider
 from screener.infrastructure.data.hybrid_provider import HybridDataProvider
 from screener.infrastructure.data.yahoo_indian_provider import YahooIndianProvider
+from screener.infrastructure.data.alphavantage_provider import AlphaVantageProvider
+from screener.infrastructure.data.fmp_provider import FmpProvider
+from screener.infrastructure.data.finnhub_provider import FinnhubProvider
 from screener.infrastructure.persistence.csv_repository import (
     CSVPredictionRepository,
     MarkdownKnowledgeStore,
@@ -116,8 +119,12 @@ def _market_data_provider():
     """Build the core market-data provider selected by configuration.
 
     ``config.market_data_provider`` picks the adapter behind the whole
-    screener: ``yahoo`` (default), ``indian_api``, or ``hybrid`` (Yahoo with
-    per-symbol Indian API fallback). Swapping is a configuration change only.
+    screener: ``yahoo`` (default), ``indian_api``, the free REST providers
+    (``alphavantage`` / ``fmp`` / ``finnhub``), ``hybrid`` (Yahoo with
+    per-symbol Indian API fallback), or ``chain`` — an ordered failover chain
+    built from ``config.provider_chain`` that skips leaf providers without a
+    configured API key and falls back to Yahoo when nothing is configured.
+    Swapping is a configuration change only.
     """
     choice = config.market_data_provider
     if choice == "indian_api":
@@ -127,7 +134,48 @@ def _market_data_provider():
             primary=YahooDataProvider(),
             fallback=IndianDataProvider(client=IndianApiClient(config.indian_api)),
         )
+    if choice == "alphavantage":
+        return AlphaVantageProvider()
+    if choice == "fmp":
+        return FmpProvider()
+    if choice == "finnhub":
+        return FinnhubProvider()
+    if choice == "chain":
+        chain = _provider_chain()
+        if len(chain) == 1:
+            return chain[0]
+        if chain:
+            return HybridDataProvider(primary=chain[0], fallbacks=chain[1:])
+        return YahooDataProvider()
     return YahooDataProvider()
+
+
+def _provider_chain() -> list[MarketDataProvider]:
+    """Resolve ``config.provider_chain`` to provider instances.
+
+    Leaf providers without a configured API key are skipped so an empty
+    (unconfigured) chain degrades to the Yahoo default rather than erroring.
+    """
+    built: list[MarketDataProvider] = []
+    for name in config.provider_chain:
+        normalized = str(name).strip().lower()
+        if normalized not in _PROVIDER_LEAF_NAMES:
+            continue
+        if normalized in ("alphavantage", "fmp", "finnhub"):
+            settings = getattr(config, normalized)
+            if not settings.enabled or not settings.api_key:
+                continue
+        if normalized == "yahoo":
+            built.append(YahooDataProvider())
+        elif normalized == "indian_api":
+            built.append(IndianDataProvider(client=IndianApiClient(config.indian_api)))
+        elif normalized == "alphavantage":
+            built.append(AlphaVantageProvider())
+        elif normalized == "fmp":
+            built.append(FmpProvider())
+        elif normalized == "finnhub":
+            built.append(FinnhubProvider())
+    return built
 
 
 def _indian_gateway():
