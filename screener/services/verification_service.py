@@ -52,10 +52,10 @@ class VerificationService:
     # ------------------------------------------------------------------ logging
 
     def log_prediction(self, rec: Recommendation, user_id: str | None = None) -> None:
-        """Persist a signal (BUY/SELL/HOLD) for later verification.
+        """Persist a signal (BULLISH/BEARISH/NEUTRAL) for later verification.
 
-        All actions are stored so the track record is auditable — a HOLD that
-        was right to avoid a loser should count, not just a BUY that went up.
+        All actions are stored so the track record is auditable — a NEUTRAL that
+        was right to avoid a loser should count, not just a BULLISH that went up.
         """
         if rec.error is not None or rec.price is None:
             return

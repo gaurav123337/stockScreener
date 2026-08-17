@@ -41,7 +41,7 @@ class FakeRepo:
         return list(self._records)
 
 
-def _record(score: float, outcome: Outcome, action: Action = Action.BUY,
+def _record(score: float, outcome: Outcome, action: Action = Action.BULLISH,
             ret: float = 0.0) -> PredictionRecord:
     ts = datetime.now(timezone.utc) - timedelta(days=60)
     return PredictionRecord(
@@ -122,7 +122,7 @@ class CheckBeforeBuyTests(unittest.TestCase):
     def _rec(self) -> Recommendation:
         return Recommendation(
             symbol="RELIANCE",
-            action=Action.BUY,
+            action=Action.BULLISH,
             score=42.0,
             price=3000.0,
             entry=2950.0,

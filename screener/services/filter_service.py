@@ -136,10 +136,10 @@ class FilterService:
              lambda r: bool(r.get("near_52w_high"))),
             ("near_52w_low", "Within 5% of 52-week low - deep value / knife catch",
              lambda r: bool(r.get("near_52w_low"))),
-            ("buy_signals", "Current action == BUY",
-             lambda r: r.get("action") == "BUY"),
-            ("sell_signals", "Current action == SELL",
-             lambda r: r.get("action") == "SELL"),
+            ("buy_signals", "Current action == BULLISH",
+             lambda r: r.get("action") == "BULLISH"),
+            ("sell_signals", "Current action == BEARISH",
+             lambda r: r.get("action") == "BEARISH"),
         ]
         for name, desc, predicate in guided:
             registry.register_filter(PredefinedFilter(name, desc, predicate, guided=True))

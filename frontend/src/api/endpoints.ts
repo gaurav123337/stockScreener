@@ -176,6 +176,10 @@ export const api = {
   }) => http.post<InvestmentPlan>("/api/plan", body),
   glossary: () => http.get<GlossaryResponse>("/api/glossary"),
   compliance: () => http.get<ComplianceResponse>("/api/compliance"),
+  dataSource: () =>
+    http.get<{ provider: string; label: string; configured: string; show: boolean }>(
+      "/api/data-source",
+    ),
 
   /* Settings */
   settings: () => http.get<Settings>("/api/settings"),

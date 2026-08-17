@@ -254,7 +254,7 @@ class FakeAnalysis:
     def analyze(self, symbol, app_config=None):
         return self._results.get(symbol) or Recommendation(
             symbol=symbol.upper() + ".NS",
-            action=Action.HOLD,
+            action=Action.NEUTRAL,
             score=0.0,
             price=0.0,
             error="insufficient price history",
@@ -274,9 +274,9 @@ def _recommendation(symbol, action, score, price, name=None, sector=None):
 
 def test_recommendation_engine_ranks_and_skips_failures():
     analysis = FakeAnalysis({
-        "A": _recommendation("A.NS", Action.BUY, 80, 100, "A Ltd", "Tech"),
-        "B": _recommendation("B.NS", Action.BUY, 60, 50, "B Ltd", "Fin"),
-        "C": _recommendation("C.NS", Action.HOLD, 40, 20, "C Ltd"),
+        "A": _recommendation("A.NS", Action.BULLISH, 80, 100, "A Ltd", "Tech"),
+        "B": _recommendation("B.NS", Action.BULLISH, 60, 50, "B Ltd", "Fin"),
+        "C": _recommendation("C.NS", Action.NEUTRAL, 40, 20, "C Ltd"),
     })
     engine = RecommendationService(analysis=analysis, data_provider=MockProvider())
 
@@ -290,16 +290,16 @@ def test_recommendation_engine_ranks_and_skips_failures():
 
 def test_recommendation_engine_respects_limit_and_action():
     analysis = FakeAnalysis({
-        "A": _recommendation("A.NS", Action.BUY, 80, 100),
-        "B": _recommendation("B.NS", Action.BUY, 60, 50),
-        "C": _recommendation("C.NS", Action.HOLD, 40, 20),
+        "A": _recommendation("A.NS", Action.BULLISH, 80, 100),
+        "B": _recommendation("B.NS", Action.BULLISH, 60, 50),
+        "C": _recommendation("C.NS", Action.NEUTRAL, 40, 20),
     })
     engine = RecommendationService(analysis=analysis, data_provider=MockProvider())
 
     assert engine.recommend_stocks(universe=["A", "B", "C"], limit=1)["count"] == 1
-    buy = engine.recommend_stocks(universe=["A", "B", "C"], limit=10, action="BUY")
+    buy = engine.recommend_stocks(universe=["A", "B", "C"], limit=10, action="BULLISH")
     assert buy["count"] == 2
-    assert all(r["action"] == "BUY" for r in buy["results"])
+    assert all(r["action"] == "BULLISH" for r in buy["results"])
 
 
 def test_recommendation_endpoint_is_registered_and_authenticated():

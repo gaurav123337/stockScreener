@@ -12,9 +12,26 @@ from pydantic import BaseModel, Field, computed_field
 
 
 class Action(str, Enum):
-    BUY = "BUY"
-    SELL = "SELL"
-    HOLD = "HOLD"
+    BULLISH = "BULLISH"
+    BEARISH = "BEARISH"
+    NEUTRAL = "NEUTRAL"
+
+    @classmethod
+    def _missing_(cls, value):
+        """Backward compatibility for payloads persisted before the rename.
+
+        Older predictions / backtest reports stored BUY / SELL / HOLD; mapping
+        them here lets old files load transparently while new writes use the
+        renamed values.
+        """
+        legacy = {
+            "BUY": cls.BULLISH,
+            "SELL": cls.BEARISH,
+            "HOLD": cls.NEUTRAL,
+        }
+        if isinstance(value, str):
+            return legacy.get(value.upper())
+        return None
 
 
 class Outcome(str, Enum):
@@ -95,6 +112,9 @@ class Recommendation(BaseModel):
     pillars: dict[str, float] = Field(default_factory=dict)
     # Phase-2 beginner-first additions: plain-language thesis card data.
     thesis_data: Thesis = Field(default_factory=Thesis)
+    # Which provider actually served the data behind this recommendation
+    # (e.g. "yahoo", "fmp") — surfaces the real source for hybrid/chain setups.
+    data_source: str | None = None
 
     @computed_field
     @property
@@ -138,6 +158,7 @@ class Recommendation(BaseModel):
             "drivers": [d.model_dump() for d in self.thesis_data.drivers],
             "what_could_go_wrong": self.thesis_data.what_could_go_wrong,
             "thesis": self.thesis_data.thesis,
+            "data_source": self.data_source,
         }
 
 
@@ -169,22 +190,22 @@ class PredictionRecord(BaseModel):
 
     def return_at(self, price: float) -> float:
         """Directional return at ``price`` — positive means the call was right."""
-        if self.action == Action.BUY:
+        if self.action == Action.BULLISH:
             return (price - self.price_at_call) / self.price_at_call
-        if self.action == Action.SELL:
+        if self.action == Action.BEARISH:
             return (self.price_at_call - price) / self.price_at_call
-        # HOLD: penalise large moves in either direction (the call was "stay put").
+        # NEUTRAL: penalise large moves in either direction (the call was "stay put").
         return -abs((price - self.price_at_call) / self.price_at_call)
 
     def directional_win(self, price: float, flat_band: float = 0.02) -> bool:
         """True when the signal's expectation at ``price`` was met.
 
-        BUY/SELL are judged directionally; HOLD is judged as "stayed flat"
-        (within ``flat_band`` of the call price), which is the honest reading
-        of a neutral signal.
+        BULLISH/BEARISH are judged directionally; NEUTRAL is judged as
+        "stayed flat" (within ``flat_band`` of the call price), which is the
+        honest reading of a neutral signal.
         """
         ret = self.return_at(price)
-        if self.action == Action.HOLD:
+        if self.action == Action.NEUTRAL:
             return abs(ret) <= flat_band
         return ret > 0
 
@@ -257,7 +278,7 @@ class PlanBasketItem(BaseModel):
     role: str = ""
     weight: float = 0.0          # share of the equity sleeve (0..1)
     score: float = 0.0
-    action: Action = Action.HOLD
+    action: Action = Action.NEUTRAL
     price: float = 0.0
     plain: str = ""              # why this stock, in plain language
     risk_badge: str | None = None

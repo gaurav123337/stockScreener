@@ -29,7 +29,7 @@ def _ensure() -> None:
 
 def log_prediction(symbol: str, action: str, price: float,
                    target, stop_loss, horizon_days: int = 30) -> None:
-    if action not in ("BUY", "SELL") or price is None:
+    if action not in ("BULLISH", "BEARISH") or price is None:
         return  # only verifiable directional calls
     _ensure()
     with PRED_FILE.open("a", newline="", encoding="utf-8") as f:
@@ -59,8 +59,8 @@ def _due(rows: list[dict]) -> list[dict]:
 
 
 def _outcome(action: str, p0: float, p1: float, target, stop) -> tuple[str, float]:
-    ret = (p1 - p0) / p0 * 100 if action == "BUY" else (p0 - p1) / p0 * 100
-    if action == "BUY":
+    ret = (p1 - p0) / p0 * 100 if action == "BULLISH" else (p0 - p1) / p0 * 100
+    if action == "BULLISH":
         if target and p1 >= float(target):
             return "target_hit", ret
         if stop and p1 <= float(stop):
@@ -95,7 +95,7 @@ def verify(fetch_price) -> dict:
     done = [r for r in rows if r["evaluated"] == "1"]
     wins = [r for r in done if r["outcome"] in ("target_hit", "correct")]
     by_action = {}
-    for a in ("BUY", "SELL"):
+    for a in ("BULLISH", "BEARISH"):
         sub = [r for r in done if r["action"] == a]
         w = [r for r in sub if r["outcome"] in ("target_hit", "correct")]
         by_action[a] = {"n": len(sub), "hit_rate": round(len(w) / len(sub) * 100, 1) if sub else None}

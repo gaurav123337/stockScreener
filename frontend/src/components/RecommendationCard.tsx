@@ -6,9 +6,9 @@ import { fmt, pct, stripExchangeSuffix } from "@/lib/format";
 import type { DriverScore, ScanRow } from "@/types/api";
 
 const actionStyles: Record<string, { border: string; badge: string }> = {
-  BUY: { border: "border-l-4 border-l-emerald-500", badge: "bg-emerald-500/15 text-brand" },
-  SELL: { border: "border-l-4 border-l-rose-500", badge: "bg-rose-500/15 text-danger" },
-  HOLD: { border: "border-l-4 border-l-yellow-400", badge: "bg-yellow-400/15 text-warning" },
+  BULLISH: { border: "border-l-4 border-l-emerald-500", badge: "bg-emerald-500/15 text-brand" },
+  BEARISH: { border: "border-l-4 border-l-rose-500", badge: "bg-rose-500/15 text-danger" },
+  NEUTRAL: { border: "border-l-4 border-l-yellow-400", badge: "bg-yellow-400/15 text-warning" },
 };
 
 const badgeTone: Record<string, string> = {
@@ -73,8 +73,8 @@ export function RecommendationCard({ row }: { row: ScanRow }) {
     );
   }
 
-  const actionStyle = actionStyles[row.action] ?? actionStyles.HOLD;
-  const showLevels = row.action === "BUY" || row.action === "SELL";
+  const actionStyle = actionStyles[row.action] ?? actionStyles.NEUTRAL;
+  const showLevels = row.action === "BULLISH" || row.action === "BEARISH";
   const drivers = row.drivers ?? [];
   const hasThesis = Boolean(row.thesis || drivers.length > 0);
 
@@ -88,6 +88,7 @@ export function RecommendationCard({ row }: { row: ScanRow }) {
           <div className="text-xs text-muted">
             {row.name}
             {row.sector ? ` · ${row.sector}` : ""}
+            {row.data_source ? ` · ${row.data_source}` : ""}
           </div>
         </div>
         <div className="flex items-center gap-1.5">

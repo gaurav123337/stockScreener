@@ -175,14 +175,14 @@ class PlanService:
         analysis: AnalysisService,
         app_config: AppConfig,
     ) -> list[Recommendation]:
-        """Score the candidate universe, keep BUY signals, diversify by sector."""
+        """Score the candidate universe, keep BULLISH signals, diversify by sector."""
         recs: list[Recommendation] = []
         for symbol in CANDIDATE_UNIVERSE:
             try:
                 rec = analysis.analyze(symbol, app_config)
             except Exception:
                 continue
-            if rec.error is None and rec.action == Action.BUY:
+            if rec.error is None and rec.action == Action.BULLISH:
                 recs.append(rec)
 
         recs.sort(key=lambda r: r.score, reverse=True)
@@ -199,7 +199,7 @@ class PlanService:
             if len(picked) >= 5:
                 break
 
-        # If fewer than 3 clear BUY signals, top up with the next-best scores
+        # If fewer than 3 clear BULLISH signals, top up with the next-best scores
         # so a beginner still gets a diversified starting list.
         if len(picked) < 3:
             for rec in recs:

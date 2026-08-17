@@ -3,7 +3,7 @@
  * Keep in sync with screener/services response shapes (e.g. `to_scan_row()`).
  */
 
-export type Action = "BUY" | "SELL" | "HOLD";
+export type Action = "BULLISH" | "BEARISH" | "NEUTRAL";
 
 /* ---------------------------------- Auth ------------------------------------ */
 
@@ -200,6 +200,8 @@ export interface ScanRow {
   drivers?: DriverScore[];
   what_could_go_wrong?: string[];
   thesis?: string | null;
+  /** Which provider actually served this row's data (e.g. "yahoo", "fmp"). */
+  data_source?: string | null;
 }
 
 /** One plain-language driver on a thesis card. */

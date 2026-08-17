@@ -5,9 +5,9 @@ const GUIDE_SECTIONS: ReadonlyArray<{ title: string; items: readonly string[] }>
   {
     title: "What each signal means",
     items: [
-      "BUY — uptrend + momentum + reasonable valuation. Enter near the shown entry, target and stop-loss. Risk:Reward shown.",
-      "SELL — downtrend / weakening momentum. Exit or avoid.",
-      "HOLD — mixed signals. Wait for confirmation.",
+      "BULLISH — uptrend + momentum + reasonable valuation. Enter near the shown entry, target and stop-loss. Risk:Reward shown.",
+      "BEARISH — downtrend / weakening momentum. Exit or avoid.",
+      "NEUTRAL — mixed signals. Wait for confirmation.",
       "Always use the stop-loss and risk only 1-2% of capital per trade.",
     ],
   },

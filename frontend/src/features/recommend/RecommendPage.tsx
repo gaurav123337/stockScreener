@@ -31,7 +31,7 @@ export default function RecommendPage() {
               symbol: s,
               name: null,
               sector: null,
-              action: "HOLD",
+              action: "NEUTRAL",
               score: 0,
               price: null,
               entry: null,

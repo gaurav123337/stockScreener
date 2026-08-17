@@ -84,7 +84,7 @@ def horizon_stats(
             benchmark_avg = sum(bench) / len(bench)
 
     by_action: dict[str, dict[str, Any]] = {}
-    for action in ("BUY", "SELL", "HOLD"):
+    for action in ("BULLISH", "BEARISH", "NEUTRAL"):
         sub_returns = [
             rec.return_at(price)
             for rec, price in samples

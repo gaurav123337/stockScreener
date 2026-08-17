@@ -1,6 +1,7 @@
 import { useFontSize } from "@/app/hooks/useFontSize";
 import { usePwaInstall } from "@/app/hooks/usePwaInstall";
 import { useTheme } from "@/app/hooks/useTheme";
+import { DataSourceBadge } from "@/components/DataSourceBadge";
 import { LoadingState } from "@/components/ui/Spinner";
 import { useAuth } from "@/features/auth/auth-context";
 import { useEntitlements } from "@/features/pro/hooks/useEntitlements";
@@ -178,6 +179,7 @@ export function AppLayout() {
             <span className="hidden truncate sm:inline">stockScreener</span>
           </NavLink>
           <div className="flex items-center gap-2">
+            <DataSourceBadge className="hidden sm:inline-flex" />
             {isLoggedIn && user && (
               <span
                 className="hidden max-w-48 items-center gap-1.5 truncate text-sm text-muted sm:flex"

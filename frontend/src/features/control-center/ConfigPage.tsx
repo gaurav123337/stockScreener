@@ -40,6 +40,9 @@ export default function ConfigPage() {
     const value = readDraft()[key];
     return typeof value === "string" ? value : "";
   }
+  function currentBool(key: string): boolean {
+    return Boolean(readDraft()[key]);
+  }
   function patchDraft(key: string, value: string) {
     const patch = readDraft();
     patch[key] = value;
@@ -150,6 +153,15 @@ export default function ConfigPage() {
                 <p className="mt-3 text-xs text-muted">
                   Chain members without a configured API key are skipped automatically.
                 </p>
+                <label className="mt-4 flex items-center gap-2 text-sm font-semibold">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-brand"
+                    checked={currentBool("show_data_source")}
+                    onChange={(e) => patchDraft("show_data_source", String(e.target.checked))}
+                  />
+                  Show the active data source on every page
+                </label>
                 {PROVIDER_KEY_FIELDS.map(({ section, label }) => (
                   <label className={`${labelClass} mt-4`} key={section}>
                     {label} API key

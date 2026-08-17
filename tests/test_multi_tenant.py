@@ -102,8 +102,8 @@ class MultiTenantTests(unittest.TestCase):
             "TEST.NS", self.preferences.get_effective_config("tenant-a")
         )
 
-        self.assertEqual(default_result.action, Action.BUY)
-        self.assertEqual(tenant_result.action, Action.HOLD)
+        self.assertEqual(default_result.action, Action.BULLISH)
+        self.assertEqual(tenant_result.action, Action.NEUTRAL)
         self.assertEqual(config.scoring.buy_threshold, original_threshold)
 
     def test_insufficient_history_has_no_actionable_levels(self):
@@ -111,7 +111,7 @@ class MultiTenantTests(unittest.TestCase):
 
         result = analysis.analyze("TEST.NS", copy.copy(config))
 
-        self.assertEqual(result.action, Action.HOLD)
+        self.assertEqual(result.action, Action.NEUTRAL)
         self.assertIsNotNone(result.error)
         self.assertIsNone(result.entry)
         self.assertIsNone(result.target)

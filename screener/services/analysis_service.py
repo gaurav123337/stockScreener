@@ -62,11 +62,19 @@ class AnalysisService:
         if history is None or history.empty or len(history) < min_rows:
             return Recommendation(
                 symbol=symbol.upper(),
-                action=Action.HOLD,
+                action=Action.NEUTRAL,
                 score=0.0,
                 price=0.0,
                 error="insufficient price history",
             )
+
+        # Which provider actually served this symbol (the configured provider,
+        # or the specific chain member for hybrid/chain setups).
+        data_source = (
+            getattr(self._provider, "active_source", None)
+            or getattr(self._provider, "provider_name", None)
+            or "unknown"
+        )
 
         info = self._provider.fetch_info(resolved)
         df = add_all(history)
@@ -89,11 +97,11 @@ class AnalysisService:
 
         # Map to action
         if score >= effective_config.scoring.buy_threshold:
-            action = Action.BUY
+            action = Action.BULLISH
         elif score <= effective_config.scoring.sell_threshold:
-            action = Action.SELL
+            action = Action.BEARISH
         else:
-            action = Action.HOLD
+            action = Action.NEUTRAL
 
         # Build trade levels
         entry, target, stop, rr = self._build_levels(
@@ -116,6 +124,7 @@ class AnalysisService:
             metrics=metrics,
             confidence=confidence,
             pillars=pillars,
+            data_source=data_source,
         )
         # Phase-2: beginner-first plain-language thesis card (drivers, risk
         # badge, role, allocation, "what could go wrong").
@@ -137,7 +146,7 @@ class AnalysisService:
 
         entry = target = stop = rr = None
 
-        if action == Action.BUY:
+        if action == Action.BULLISH:
             entry = round(price, 2)
             atr_stop = price - app_config.risk.atr_multiplier * atr
             candidates = [atr_stop]
@@ -153,7 +162,7 @@ class AnalysisService:
             target = round(min(tgt_candidates), 2)
             rr = round((target - price) / risk, 2) if risk > 0 else None
 
-        elif action == Action.SELL:
+        elif action == Action.BEARISH:
             entry = round(price, 2)
             stop = round(price + app_config.risk.atr_multiplier * atr, 2)
             risk = stop - price

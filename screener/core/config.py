@@ -292,6 +292,9 @@ class AppConfig(BaseSettings):
     provider_chain: list[str] = Field(default_factory=lambda: [
         "fmp", "alphavantage", "finnhub", "yahoo",
     ])
+    # Whether the app surfaces the active data-source provider on pages.
+    # Product owners control this switch from the control center.
+    show_data_source: bool = True
 
     # Which adapter backs the Indian market workspace. Both providers conform
     # to the same gateway contract, so this is the only switch that changes.
@@ -418,6 +421,7 @@ class AppConfig(BaseSettings):
         snap["market_data_provider"] = self.market_data_provider
         snap["indian_market_provider"] = self.indian_market_provider
         snap["provider_chain"] = list(self.provider_chain)
+        snap["show_data_source"] = self.show_data_source
         return snap
 
     def load_user_overrides(self) -> None:
@@ -482,6 +486,7 @@ class AppConfig(BaseSettings):
         for field in ("market_data_provider", "indian_market_provider"):
             validated[field] = self._validate_enum(field, candidate[field])
         validated["provider_chain"] = self._validate_chain(candidate.get("provider_chain"))
+        validated["show_data_source"] = bool(candidate.get("show_data_source", True))
 
         self._apply(validated)
         self._persist(self.editable_snapshot())
@@ -514,6 +519,8 @@ class AppConfig(BaseSettings):
             )
         if "provider_chain" in values:
             self.provider_chain = self._validate_chain(values["provider_chain"])
+        if "show_data_source" in values:
+            self.show_data_source = bool(values["show_data_source"])
 
     @staticmethod
     def _validate_chain(value: Any) -> list[str]:

@@ -13,8 +13,8 @@ export const SECTION_META: ReadonlyArray<readonly [string, string, string]> = [
 ];
 
 const LABELS: Record<string, string> = {
-  buy_threshold: "BUY score threshold",
-  sell_threshold: "SELL score threshold",
+  buy_threshold: "BULLISH score threshold",
+  sell_threshold: "BEARISH score threshold",
   trend_weight_sma50: "Weight: above 50-DMA",
   trend_weight_sma200: "Weight: above 200-DMA",
   trend_weight_cross: "Weight: golden/death cross",

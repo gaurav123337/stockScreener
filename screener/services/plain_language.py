@@ -154,8 +154,8 @@ GLOSSARY: dict[str, dict[str, str]] = {
     "action": {
         "term": "Call",
         "plain": (
-            "The engine's plain-language verdict: BUY (looks good), SELL (looks "
-            "risky) or HOLD (mixed — wait for a clearer signal)."
+            "The engine's plain-language verdict: BULLISH (looks good), BEARISH (looks "
+            "risky) or NEUTRAL (mixed — wait for a clearer signal)."
         ),
     },
     "asset_split": {
@@ -299,9 +299,9 @@ def risk_badge(rec: Recommendation) -> str:
 
 def portfolio_role(rec: Recommendation) -> str:
     """Suggested role for this stock inside a portfolio, in plain language."""
-    if rec.action == Action.SELL:
+    if rec.action == Action.BEARISH:
         return "Avoid or reduce now"
-    if rec.action == Action.HOLD:
+    if rec.action == Action.NEUTRAL:
         return "Watch — wait for a clearer signal"
     score = rec.score
     confident = (rec.confidence or 0.0) >= 0.6
@@ -314,7 +314,7 @@ def portfolio_role(rec: Recommendation) -> str:
 
 def allocation_size(rec: Recommendation) -> float | None:
     """Suggested share of the equity sleeve (0..1). 0 / None = don't add yet."""
-    if rec.action == Action.SELL or rec.action == Action.HOLD:
+    if rec.action == Action.BEARISH or rec.action == Action.NEUTRAL:
         return None
     if rec.score >= 50 and (rec.confidence or 0.0) >= 0.6:
         base = 0.10
@@ -324,7 +324,7 @@ def allocation_size(rec: Recommendation) -> float | None:
         base = 0.03
     risk_mult = {"Low": 1.0, "Medium": 0.8, "High": 0.5}.get(risk_badge(rec), 0.7)
     value = round(base * risk_mult, 2)
-    return max(value, 0.02) if rec.action == Action.BUY else None
+    return max(value, 0.02) if rec.action == Action.BULLISH else None
 
 
 def what_could_go_wrong(rec: Recommendation) -> list[str]:
