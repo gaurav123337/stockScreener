@@ -102,7 +102,7 @@ class BacktestService:
             info = self._safe_info(symbol)
             last_idx = pd.to_datetime(df.index)
             local_signals = 0
-            action_split = {"BUY": 0, "SELL": 0, "HOLD": 0}
+            action_split = {"BULLISH": 0, "BEARISH": 0, "NEUTRAL": 0}
             for t in eval_dates:
                 pos = last_idx.searchsorted(pd.Timestamp(t), side="right") - 1
                 if pos < 1:
@@ -117,8 +117,8 @@ class BacktestService:
                 except Exception:  # noqa: BLE001 — skip glitchy rows
                     continue
                 score = float(max(-100, min(100, score)))
-                action = "BUY" if score >= config.scoring.buy_threshold else (
-                    "SELL" if score <= config.scoring.sell_threshold else "HOLD"
+                action = "BULLISH" if score >= config.scoring.buy_threshold else (
+                    "BEARISH" if score <= config.scoring.sell_threshold else "NEUTRAL"
                 )
                 rec = PredictionRecord(
                     ts=pd.Timestamp(on).to_pydatetime().replace(tzinfo=None),
@@ -222,11 +222,11 @@ class BacktestService:
                     continue
                 score = float(max(-100, min(100, score)))
                 if score >= config.scoring.buy_threshold:
-                    action = "BUY"
+                    action = "BULLISH"
                 elif score <= config.scoring.sell_threshold:
-                    action = "SELL"
+                    action = "BEARISH"
                 else:
-                    action = "HOLD"
+                    action = "NEUTRAL"
 
                 rec = PredictionRecord(
                     ts=pd.Timestamp(on).to_pydatetime().replace(tzinfo=None),
@@ -263,7 +263,7 @@ class BacktestService:
                 f"One signal sampled per symbol every {config.backtest.sample_every_days} days from {start}",
                 f"Indicators at time t use only data up to t (no lookahead)",
                 f"Each signal measured at {len(horizons)} horizons: {', '.join(f'{h}d' for h in horizons)}",
-                "HOLD counted as correct when the stock stayed within +-2% (stayed flat)",
+                "NEUTRAL counted as correct when the stock stayed within +-2% (stayed flat)",
                 f"Benchmark: {config.verification.benchmark_symbol} buy-and-hold over the same windows",
             ],
             notes=[

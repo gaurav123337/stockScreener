@@ -9,7 +9,7 @@ SECTORS = ["Technology", "Banking", "Energy", "FMCG", "Auto"]
 def _rec(symbol: str, score: float, sector: str) -> Recommendation:
     return Recommendation(
         symbol=f"{symbol}.NS",
-        action=Action.BUY if score > 0 else Action.HOLD,
+        action=Action.BULLISH if score > 0 else Action.NEUTRAL,
         score=score,
         price=100.0,
         reasons=["Price above 50-DMA (90.0) — short-term uptrend"],
@@ -40,7 +40,7 @@ class StubAnalysis:
             return self.scores[key]
         return Recommendation(
             symbol=f"{symbol}.NS",
-            action=Action.HOLD,
+            action=Action.NEUTRAL,
             score=-20,
             price=100.0,
             error="insufficient price history",
@@ -68,7 +68,7 @@ def test_basket_is_size_three_to_five_and_buy_signals():
     plan = _plan()
     assert 3 <= len(plan.basket) <= 5
     for item in plan.basket:
-        assert item.action == Action.BUY
+        assert item.action == Action.BULLISH
         assert item.symbol
         assert item.plain
         assert item.weight > 0

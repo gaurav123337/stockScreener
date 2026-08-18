@@ -48,6 +48,10 @@ class YahooDataProvider(MarketDataProvider):
         )
         self._nse = nse_master or NseMasterStore()
 
+    @property
+    def provider_name(self) -> str:
+        return "yahoo"
+
     def normalize_symbol(self, symbol: str, exchange: str = "NS") -> str:
         """Convert 'RELIANCE' -> 'RELIANCE.NS'. Pass-through if already suffixed.
 

@@ -22,9 +22,9 @@ const badgeTone: Record<string, string> = {
 };
 
 const actionBadge: Record<string, string> = {
-  BUY: "bg-emerald-500/15 text-brand",
-  SELL: "bg-rose-500/15 text-danger",
-  HOLD: "bg-yellow-400/15 text-warning",
+  BULLISH: "bg-emerald-500/15 text-brand",
+  BEARISH: "bg-rose-500/15 text-danger",
+  NEUTRAL: "bg-yellow-400/15 text-warning",
 };
 
 export default function PortfolioPage() {
@@ -48,7 +48,7 @@ export default function PortfolioPage() {
               symbol,
               name: null,
               sector: null,
-              action: "HOLD",
+              action: "NEUTRAL",
               score: 0,
               price: null,
               entry: null,

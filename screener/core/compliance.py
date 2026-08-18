@@ -15,6 +15,24 @@ from datetime import datetime, timezone
 
 from screener.core.config import config
 
+# Human-readable labels for each market-data provider id.
+PROVIDER_LABELS: dict[str, str] = {
+    "yahoo": "Yahoo Finance",
+    "indian_api": "Indian API",
+    "alphavantage": "Alpha Vantage",
+    "fmp": "Financial Modeling Prep",
+    "finnhub": "Finnhub",
+    "hybrid": "Hybrid (Yahoo + Indian API)",
+    "chain": "Failover chain",
+}
+
+
+def provider_label(provider_id: str | None) -> str:
+    """Display label for a provider id (falls back to the id itself)."""
+    if not provider_id:
+        return config.compliance.data_source_label
+    return PROVIDER_LABELS.get(str(provider_id), str(provider_id))
+
 
 def coverage_ratio(matched: int, total: int) -> float:
     """Fraction (0.0–1.0) of the scanned universe that produced results."""

@@ -16,9 +16,9 @@ const HEADINGS = [
 ];
 const tableCellClass = "whitespace-nowrap border-b border-border px-3 py-2.5 text-right";
 const actionTextStyles: Record<string, string> = {
-  BUY: "font-bold text-brand",
-  SELL: "font-bold text-danger",
-  HOLD: "font-bold text-warning",
+  BULLISH: "font-bold text-brand",
+  BEARISH: "font-bold text-danger",
+  NEUTRAL: "font-bold text-warning",
 };
 
 export function ScanResultsTable(props: {

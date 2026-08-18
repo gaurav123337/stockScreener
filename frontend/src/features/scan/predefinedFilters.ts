@@ -37,6 +37,6 @@ export const BUILT_IN_FILTERS: PredefinedFilter[] = [
     name: "near_52w_low",
     description: "Within 5% of 52-week low - deep value / knife catch",
   },
-  { name: "buy_signals", description: "Current action == BUY" },
-  { name: "sell_signals", description: "Current action == SELL" },
+  { name: "buy_signals", description: "Current action == BULLISH" },
+  { name: "sell_signals", description: "Current action == BEARISH" },
 ];

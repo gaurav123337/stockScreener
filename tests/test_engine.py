@@ -61,10 +61,10 @@ def test_buy_on_uptrend():
     provider = MockDataProvider(history, info={"pegRatio": 0.8, "returnOnEquity": 0.2})
     analysis = AnalysisService(data_provider=provider, scoring_engine=ScoringEngine(use_registry=False))
     rec = analysis.analyze("TEST.NS")
-    assert rec.action in (Action.BUY, Action.HOLD), rec.action
+    assert rec.action in (Action.BULLISH, Action.NEUTRAL), rec.action
     assert rec.score > 0, rec.score
     assert any("200-DMA" in r or "50-DMA" in r for r in rec.reasons)
-    if rec.action == Action.BUY:
+    if rec.action == Action.BULLISH:
         assert rec.target and rec.stop_loss and rec.target > rec.price > rec.stop_loss
     print(f"  Uptrend -> {rec.action.value} score={rec.score:+.0f} reasons={len(rec.reasons)}")
 
@@ -75,9 +75,9 @@ def test_sell_on_downtrend():
     provider = MockDataProvider(history, info={})
     analysis = AnalysisService(data_provider=provider, scoring_engine=ScoringEngine(use_registry=False))
     rec = analysis.analyze("TEST.NS")
-    assert rec.action in (Action.SELL, Action.HOLD), rec.action
+    assert rec.action in (Action.BEARISH, Action.NEUTRAL), rec.action
     assert rec.score < 0, rec.score
-    if rec.action == Action.SELL:
+    if rec.action == Action.BEARISH:
         assert rec.target < rec.price < rec.stop_loss
     print(f"  Downtrend -> {rec.action.value} score={rec.score:+.0f}")
 
@@ -87,7 +87,7 @@ def test_filters():
 
     row = {"rsi": 25, "score": 40, "roe": 0.2, "peg": 0.5,
            "above_sma50": True, "above_sma200": True, "golden_cross": True,
-           "action": "BUY", "debt_to_equity": 50}
+           "action": "BULLISH", "debt_to_equity": 50}
 
     assert filter_service.get_filter("oversold").matches(row)
     assert filter_service.get_filter("uptrend").matches(row)

@@ -139,7 +139,7 @@ def test_value_and_quality_filters_are_distinct():
     cheap_low_roe = {
         "peg": 0.5, "roe": 0.10, "debt_to_equity": 50,
         "rsi": 60, "score": 50, "above_sma50": True, "above_sma200": True,
-        "golden_cross": True, "action": "BUY",
+        "golden_cross": True, "action": "BULLISH",
     }
     assert value.matches(cheap_low_roe)
     assert not quality.matches(cheap_low_roe)
@@ -148,7 +148,7 @@ def test_value_and_quality_filters_are_distinct():
     pricey_high_roe = {
         "peg": 1.5, "roe": 0.25, "debt_to_equity": 40,
         "rsi": 60, "score": 50, "above_sma50": True, "above_sma200": True,
-        "golden_cross": True, "action": "BUY",
+        "golden_cross": True, "action": "BULLISH",
     }
     assert not value.matches(pricey_high_roe)
     assert quality.matches(pricey_high_roe)
@@ -201,7 +201,7 @@ def test_analyze_retries_longer_period_on_insufficient_history():
     analysis = AnalysisService(data_provider=provider, scoring_engine=ScoringEngine(use_registry=False))
     rec = analysis.analyze("TATAMOTORS")
     assert rec.error is None
-    assert rec.action.value in ("BUY", "HOLD")
+    assert rec.action.value in ("BULLISH", "NEUTRAL")
     assert provider.calls == ["1y", "2y"]
     print(f"  Insufficient-history retry OK (periods tried: {provider.calls})")
 

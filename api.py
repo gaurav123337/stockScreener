@@ -32,6 +32,7 @@ from screener.core.compliance import (
     compliance_block,
     coverage_ratio,
     provenance_block,
+    provider_label,
 )
 from screener.core.config import config
 from screener.core.feedback_models import FeedbackSubmission, FeedbackWorkflowUpdate
@@ -903,7 +904,12 @@ def scan(body: ScanBody, user: UserProfile = Depends(get_current_user)):
     # Freshness + trust framing for the whole scan (Phase-0 compliance).
     data = get_service(MarketDataProvider)
     data_updated_at = getattr(data, "history_updated_at", lambda: None)()
-    block = compliance_block()
+    provider_id = (
+        getattr(data, "active_source", None)
+        or getattr(data, "provider_name", None)
+        or "unknown"
+    )
+    block = compliance_block(provider_label(provider_id))
     provenance = provenance_block(data_updated_at)
 
     return {
@@ -944,8 +950,8 @@ def recommendations(
     """
     if limit < 1 or limit > 200:
         raise ValidationError("limit must be between 1 and 200")
-    if action and action not in ("BUY", "HOLD", "SELL"):
-        raise ValidationError("action must be BUY, HOLD, or SELL")
+    if action and action not in ("BULLISH", "NEUTRAL", "BEARISH"):
+        raise ValidationError("action must be BULLISH, NEUTRAL, or BEARISH")
 
     prefs = get_service(PreferencesService)
     effective_config = prefs.get_effective_config(user.user_id)
@@ -962,7 +968,12 @@ def recommendations(
     # Attach the same trust/freshness envelope as /api/scan (Phase-0).
     data = get_service(MarketDataProvider)
     data_updated_at = getattr(data, "history_updated_at", lambda: None)()
-    block = compliance_block()
+    provider_id = (
+        getattr(data, "active_source", None)
+        or getattr(data, "provider_name", None)
+        or "unknown"
+    )
+    block = compliance_block(provider_label(provider_id))
     provenance = provenance_block(data_updated_at)
     payload["universe_size"] = payload.get("total_scanned", 0)
     payload["coverage"] = coverage_ratio(payload["count"], payload.get("total_scanned", 0))
@@ -987,6 +998,28 @@ def compliance(user: UserProfile = Depends(get_current_user)):
     return {
         **compliance_block(),
         **provenance_block(data_updated_at),
+    }
+
+
+@app.get("/api/data-source")
+def data_source(user: UserProfile = Depends(get_current_user)):
+    """Which provider is currently serving market data, and whether to show it.
+
+    The ``show`` flag is controlled by the product owner via the control
+    center config (``show_data_source``); the frontend renders the badge on
+    every page only while it is enabled.
+    """
+    provider = get_service(MarketDataProvider)
+    provider_id = (
+        getattr(provider, "active_source", None)
+        or getattr(provider, "provider_name", None)
+        or "unknown"
+    )
+    return {
+        "provider": provider_id,
+        "label": provider_label(provider_id),
+        "configured": config.market_data_provider,
+        "show": bool(config.show_data_source),
     }
 
 

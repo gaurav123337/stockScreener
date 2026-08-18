@@ -9,7 +9,7 @@ from screener.services.plain_language import (
 
 GOOD = Recommendation(
     symbol="TCS.NS",
-    action=Action.BUY,
+    action=Action.BULLISH,
     score=62,
     price=3800,
     reasons=[
@@ -82,14 +82,14 @@ def test_portfolio_role_and_allocation():
 
 
 def test_hold_gets_no_allocation():
-    hold = GOOD.model_copy(update={"action": Action.HOLD, "score": 5})
+    hold = GOOD.model_copy(update={"action": Action.NEUTRAL, "score": 5})
     thesis = build_thesis(hold)
     assert thesis.allocation_size is None
     assert "wait" in thesis.portfolio_role.lower()
 
 
 def test_sell_gets_avoid_role():
-    sell = GOOD.model_copy(update={"action": Action.SELL, "score": -60})
+    sell = GOOD.model_copy(update={"action": Action.BEARISH, "score": -60})
     thesis = build_thesis(sell)
     assert "avoid" in thesis.portfolio_role.lower()
 

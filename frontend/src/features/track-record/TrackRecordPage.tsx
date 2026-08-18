@@ -111,8 +111,8 @@ export default function TrackRecordPage() {
   const live = verifyQuery.data;
 
   const primary = report?.horizons[0];
-  const buy = primary?.by_action["BUY"];
-  const sell = primary?.by_action["SELL"];
+  const bullish = primary?.by_action["BULLISH"];
+  const bearish = primary?.by_action["BEARISH"];
 
   return (
     <>
@@ -162,15 +162,15 @@ export default function TrackRecordPage() {
             <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
               <StatBox label="30d hit-rate (all signals)" value={rate(primary?.hit_rate)} />
               <StatBox
-                label="BUY hit-rate (actionable)"
-                value={rate(buy?.hit_rate)}
+                label="BULLISH hit-rate (actionable)"
+                value={rate(bullish?.hit_rate)}
                 tone="text-brand"
               />
-              <StatBox label="SELL hit-rate" value={rate(sell?.hit_rate)} />
+              <StatBox label="BEARISH hit-rate" value={rate(bearish?.hit_rate)} />
               <StatBox
-                label="30d BUY avg return"
-                value={signedPct(buy?.avg_return)}
-                tone={buy && buy.avg_return > 0 ? "text-brand" : "text-ink"}
+                label="30d BULLISH avg return"
+                value={signedPct(bullish?.avg_return)}
+                tone={bullish && bullish.avg_return > 0 ? "text-brand" : "text-ink"}
               />
             </div>
 

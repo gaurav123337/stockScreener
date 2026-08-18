@@ -129,14 +129,14 @@ def _score_fundamentals(info: dict, reasons: list) -> float:
 
 def analyze(symbol: str, history: pd.DataFrame, info: dict | None = None) -> Recommendation:
     if history is None or history.empty or len(history) < 60:
-        return Recommendation(symbol, "HOLD", 0, np.nan, None, None, None, None,
+        return Recommendation(symbol, "NEUTRAL", 0, np.nan, None, None, None, None,
                               [], {}, error="insufficient price history")
     info = info or {}
     # Drop rows where Close is NaN — Yahoo appends an all-NaN placeholder row
     # for the current/upcoming trading day, which would otherwise poison iloc[-1].
     history = history.dropna(subset=["Close"])
     if len(history) < 60:
-        return Recommendation(symbol, "HOLD", 0, np.nan, None, None, None, None,
+        return Recommendation(symbol, "NEUTRAL", 0, np.nan, None, None, None, None,
                               [], {}, error="insufficient price history")
     df = add_all(history)
 
@@ -152,11 +152,11 @@ def analyze(symbol: str, history: pd.DataFrame, info: dict | None = None) -> Rec
     score = float(max(-100, min(100, score)))
 
     if score >= 30:
-        action = "BUY"
+        action = "BULLISH"
     elif score <= -30:
-        action = "SELL"
+        action = "BEARISH"
     else:
-        action = "HOLD"
+        action = "NEUTRAL"
 
     # Entry / target / stop-loss using ATR + 52w structure
     atr = float(last["ATR14"]) if pd.notna(last.get("ATR14")) else price * 0.03
@@ -166,7 +166,7 @@ def analyze(symbol: str, history: pd.DataFrame, info: dict | None = None) -> Rec
 
     entry = target = stop = None
     rr = None
-    if action == "BUY":
+    if action == "BULLISH":
         entry = round(price, 2)
         # stop below 50-DMA or 1.5*ATR, whichever is nearer but sensible —
         # and always strictly BELOW the entry price
@@ -181,7 +181,7 @@ def analyze(symbol: str, history: pd.DataFrame, info: dict | None = None) -> Rec
             tgt_candidates.append(high52)
         target = round(min(tgt_candidates), 2)
         rr = round((target - price) / risk, 2) if risk > 0 else None
-    elif action == "SELL":
+    elif action == "BEARISH":
         entry = round(price, 2)
         # stop always strictly ABOVE the entry price
         stop = round(price + 1.5 * atr, 2)

@@ -93,12 +93,12 @@ PREDEFINED: dict[str, tuple[str, Callable[[dict], bool]]] = {
         lambda r: bool(r.get("near_52w_low")),
     ),
     "buy_signals": (
-        "Current action == BUY",
-        lambda r: r.get("action") == "BUY",
+        "Current action == BULLISH",
+        lambda r: r.get("action") == "BULLISH",
     ),
     "sell_signals": (
-        "Current action == SELL",
-        lambda r: r.get("action") == "SELL",
+        "Current action == BEARISH",
+        lambda r: r.get("action") == "BEARISH",
     ),
 }
 

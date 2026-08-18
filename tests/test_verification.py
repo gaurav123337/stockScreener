@@ -65,7 +65,7 @@ def test_verify_evaluates_each_elapsed_horizon(tmp_path):
     rec = PredictionRecord(
         ts=t0,
         symbol="RELIANCE",
-        action=Action.BUY,
+        action=Action.BULLISH,
         price_at_call=100.0,
         horizon_days=365,
         score=40.0,
@@ -89,7 +89,7 @@ def test_verify_evaluates_each_elapsed_horizon(tmp_path):
     assert by_h[30].benchmark_avg_return is not None
     assert by_h[30].vs_benchmark is not None
     assert by_h[30].max_drawdown is not None
-    assert by_h[30].by_action["BUY"]["n"] == 1
+    assert by_h[30].by_action["BULLISH"]["n"] == 1
 
     assert by_h[90].n == 1
     assert by_h[365].n == 0  # horizon still open -> rolling window excludes it
@@ -105,11 +105,11 @@ def test_verify_sell_and_hold_semantics(tmp_path):
 
     records = [
         PredictionRecord(
-            ts=t0, symbol="SELLSTK", action=Action.SELL,
+            ts=t0, symbol="SELLSTK", action=Action.BEARISH,
             price_at_call=100.0, horizon_days=365,
         ),
         PredictionRecord(
-            ts=t0, symbol="HOLDSTK", action=Action.HOLD,
+            ts=t0, symbol="HOLDSTK", action=Action.NEUTRAL,
             price_at_call=100.0, horizon_days=365,
         ),
     ]
@@ -120,10 +120,10 @@ def test_verify_sell_and_hold_semantics(tmp_path):
     by_h = {h.horizon_days: h for h in report.horizons}
     assert by_h[30].n == 2
     # SELL won (price fell), HOLD lost (moved well past the flat band).
-    assert by_h[30].by_action["SELL"]["n"] == 1
-    assert by_h[30].by_action["SELL"]["hit_rate"] == 100.0
-    assert by_h[30].by_action["HOLD"]["n"] == 1
-    assert by_h[30].by_action["HOLD"]["hit_rate"] == 0.0
+    assert by_h[30].by_action["BEARISH"]["n"] == 1
+    assert by_h[30].by_action["BEARISH"]["hit_rate"] == 100.0
+    assert by_h[30].by_action["NEUTRAL"]["n"] == 1
+    assert by_h[30].by_action["NEUTRAL"]["hit_rate"] == 0.0
 
 
 # --------------------------------------------------------------------------- #
@@ -138,7 +138,7 @@ def test_log_prediction_persists_hold_and_new_fields(tmp_path):
 
     rec = Recommendation(
         symbol="TATA.NS",
-        action=Action.HOLD,
+        action=Action.NEUTRAL,
         score=5.0,
         price=100.0,
         confidence=0.55,
@@ -148,7 +148,7 @@ def test_log_prediction_persists_hold_and_new_fields(tmp_path):
 
     rows = repo.get_all()
     assert len(rows) == 1
-    assert rows[0].action == Action.HOLD
+    assert rows[0].action == Action.NEUTRAL
     assert rows[0].score == 5.0
     assert rows[0].confidence == 0.55
     assert rows[0].user_id == "u9"
@@ -161,7 +161,7 @@ def test_csv_roundtrip_preserves_zero_score(tmp_path):
     rec = PredictionRecord(
         ts=datetime.now(),
         symbol="ZERO.NS",
-        action=Action.BUY,
+        action=Action.BULLISH,
         price_at_call=50.0,
         score=0.0,
         confidence=0.0,
@@ -178,7 +178,7 @@ def test_log_prediction_skips_errors_and_missing_price(tmp_path):
     repo = CSVPredictionRepository(tmp_path / "pred.csv")
     service = VerificationService(repository=repo, data_provider=FakeProvider({}))
     service.log_prediction(
-        Recommendation(symbol="ERR.NS", action=Action.BUY, score=1.0, price=0.0, error="insufficient price history")
+        Recommendation(symbol="ERR.NS", action=Action.BULLISH, score=1.0, price=0.0, error="insufficient price history")
     )
     assert repo.get_all() == []
 
@@ -188,8 +188,8 @@ def test_log_recommendations_never_raises(tmp_path):
     service = VerificationService(repository=repo, data_provider=FakeProvider({}))
     service.log_recommendations(
         [
-            Recommendation(symbol="OK.NS", action=Action.BUY, score=1.0, price=10.0),
-            Recommendation(symbol="BAD.NS", action=Action.BUY, score=1.0, price=0.0, error="boom"),
+            Recommendation(symbol="OK.NS", action=Action.BULLISH, score=1.0, price=10.0),
+            Recommendation(symbol="BAD.NS", action=Action.BULLISH, score=1.0, price=0.0, error="boom"),
         ],
         user_id="u2",
     )
@@ -199,7 +199,7 @@ def test_log_recommendations_never_raises(tmp_path):
 # --------------------------------------------------------------------------- #
 # Backfill seed: /api/verify shows dated, nonzero results from day one
 # --------------------------------------------------------------------------- #
-def _replay_record(ts, symbol="RELIANCE", action=Action.BUY, price=100.0):
+def _replay_record(ts, symbol="RELIANCE", action=Action.BULLISH, price=100.0):
     return PredictionRecord(
         ts=ts, symbol=symbol, action=action,
         price_at_call=price, horizon_days=365,
@@ -262,11 +262,11 @@ def test_repository_migrates_stale_header(tmp_path):
     with pred.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(old_header)
-        w.writerow(["2026-01-01T00:00:00", "RELIANCE", "BUY", "100", "", "", "30",
+        w.writerow(["2026-01-01T00:00:00", "RELIANCE", "BULLISH", "100", "", "", "30",
                     "0", "", "", "", "", "40", "0.6", "system/backtest"])
-        w.writerow(["2026-01-01T00:00:00", "RELIANCE", "BUY", "100", "", "", "30",
+        w.writerow(["2026-01-01T00:00:00", "RELIANCE", "BULLISH", "100", "", "", "30",
                     "0", "", "", "", "", "40", "0.6", "system/backtest"])
-        w.writerow(["2026-01-01T00:00:00", "TATA.NS", "HOLD", "50", "", "", "30",
+        w.writerow(["2026-01-01T00:00:00", "TATA.NS", "NEUTRAL", "50", "", "", "30",
                     "0", "", "", "", "", "5", "0.5", "guest"])
 
     repo = CSVPredictionRepository(pred)
