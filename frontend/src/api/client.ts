@@ -38,15 +38,26 @@ function hasMessage(data: unknown): data is ErrorPayload {
 const TOKEN_KEY = "stockScreener_token";
 const USER_KEY = "stockScreener_user";
 
+// In-memory mirror of the token/user. Some embedding contexts (sandboxed
+// iframes, private browsing) make localStorage unavailable or throw on
+// access; without this fallback a freshly-logged-in session would read back
+// no token, every authenticated call would 401, and the app would bounce the
+// user back to the sign-in page immediately after they log in.
+let memoryToken: string | null = null;
+let memoryUser: string | null = null;
+
 export function getToken(): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    const stored = localStorage.getItem(TOKEN_KEY);
+    if (stored) return stored;
   } catch {
-    return null;
+    // localStorage unavailable — fall through to the in-memory mirror
   }
+  return memoryToken;
 }
 
 export function setToken(token: string | null): void {
+  memoryToken = token;
   try {
     if (token) {
       localStorage.setItem(TOKEN_KEY, token);
@@ -54,7 +65,7 @@ export function setToken(token: string | null): void {
       localStorage.removeItem(TOKEN_KEY);
     }
   } catch {
-    // localStorage unavailable
+    // localStorage unavailable — the in-memory mirror keeps the session alive
   }
 }
 
@@ -68,11 +79,11 @@ export function getStoredUser(): {
 } | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    if (raw) return JSON.parse(raw) as ReturnType<typeof getStoredUser>;
   } catch {
-    return null;
+    // localStorage unavailable — fall through to the in-memory mirror
   }
+  return memoryUser ? (JSON.parse(memoryUser) as ReturnType<typeof getStoredUser>) : null;
 }
 
 export function setStoredUser(
@@ -85,6 +96,7 @@ export function setStoredUser(
     tier?: string;
   } | null,
 ): void {
+  memoryUser = user ? JSON.stringify(user) : null;
   try {
     if (user) {
       localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -92,7 +104,7 @@ export function setStoredUser(
       localStorage.removeItem(USER_KEY);
     }
   } catch {
-    // localStorage unavailable
+    // localStorage unavailable — the in-memory mirror keeps the session alive
   }
 }
 
@@ -122,13 +134,15 @@ const raw = ofetch.create({
 });
 
 async function request<T>(path: string, options?: FetchOptions<"json">): Promise<T> {
+  const headers = {
+    ...authHeaders(),
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+  const hadToken = Boolean(headers.Authorization);
   try {
     return await raw<T>(path, {
       ...options,
-      headers: {
-        ...authHeaders(),
-        ...(options?.headers as Record<string, string> | undefined),
-      },
+      headers,
     });
   } catch (err) {
     if (err instanceof FetchError) {
@@ -149,8 +163,12 @@ async function request<T>(path: string, options?: FetchOptions<"json">): Promise
         }
       }
 
-      // Auto-logout on 401
-      if (err.statusCode === 401) {
+      // Auto-logout on 401 only when this request was authenticated. A 401 on
+      // a request that never carried a token is an access-control response
+      // (e.g. a strict endpoint hit by a guest), not a dead session — clearing
+      // auth and bouncing to the sign-in screen for those would log people out
+      // for reasons unrelated to their login.
+      if (err.statusCode === 401 && hadToken) {
         clearAuth();
         // Force redirect to login if we're in the SPA
         if (typeof window !== "undefined" && !window.location.hash.includes("/auth")) {
