@@ -23,9 +23,27 @@ _ALPHABET = string.ascii_letters + string.digits
 _TOKEN_EXPIRY_DAYS = 7
 
 
+def _secret_file() -> Path:
+    return Path(__file__).resolve().parent.parent.parent / "data" / ".secret_key"
+
+
 def _get_secret() -> bytes:
-    """Get or create the server secret key for token signing."""
-    secret_file = Path(__file__).resolve().parent.parent.parent / "data" / ".secret_key"
+    """Get or create the server secret key for token signing.
+
+    Priority:
+    1. ``SCREENER_TOKEN_SECRET`` (hex or raw bytes) — recommended for hosting
+       on platforms with ephemeral filesystems (e.g. Render free tier), where
+       the file-based key is regenerated on every restart and invalidates all
+       previously-issued tokens.
+    2. The on-disk ``data/.secret_key`` file (existing behaviour).
+    """
+    from_env = os.getenv("SCREENER_TOKEN_SECRET", "").strip()
+    if from_env:
+        try:
+            return bytes.fromhex(from_env)
+        except ValueError:
+            return from_env.encode()
+    secret_file = _secret_file()
     if secret_file.exists():
         return secret_file.read_bytes()
     secret_file.parent.mkdir(parents=True, exist_ok=True)
@@ -66,16 +84,38 @@ def create_token(user_id: str, username: str, token_version: int = 0) -> str:
     return raw.hex()
 
 
-def validate_token(token: str) -> dict[str, Any] | None:
-    """Validate a token and return the payload, or None if invalid/expired."""
+def _split_token(token: str) -> tuple[bytes, str] | None:
+    """Split a token into (payload_bytes, signature_hex).
+
+    Supports both the current compact format (``hex(payload + b'.' + sig)``)
+    and the legacy ``hex(payload) + b'.' + hex(sig)`` format written by older
+    builds — accepting both lets already-deployed clients keep working after an
+    upgrade without forcing a re-login.
+    """
     try:
         raw = bytes.fromhex(token)
-        # Split on last dot (sig separator)
         last_dot = raw.rfind(b".")
         if last_dot == -1:
             return None
-        payload_bytes = raw[:last_dot]
-        sig_hex = raw[last_dot + 1:].decode()
+        payload = raw[:last_dot]
+        sig = raw[last_dot + 1:]
+        return payload, sig.decode()
+    except ValueError:
+        # Legacy dot-separated form: hex(payload) + b'.' + hex(sig)
+        try:
+            payload_hex, sig_hex = token.split(".", 1)
+            return bytes.fromhex(payload_hex), sig_hex
+        except (ValueError, TypeError):
+            return None
+
+
+def validate_token(token: str) -> dict[str, Any] | None:
+    """Validate a token and return the payload, or None if invalid/expired."""
+    try:
+        split = _split_token(token)
+        if split is None:
+            return None
+        payload_bytes, sig_hex = split
         expected_sig = hmac.new(_SECRET, payload_bytes, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig_hex, expected_sig):
             return None

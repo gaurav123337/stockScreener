@@ -9,9 +9,19 @@ services:
     envVars:
       - key: SCREENER_ENVIRONMENT
         value: production
+      # Stable token signing secret. Render free-tier filesystems are
+      # ephemeral, so without this the secret is regenerated on every restart
+      # and invalidates all logged-in sessions (users get bounced to sign-in).
+      # Generate once, e.g. `openssl rand -hex 32`, and keep it fixed.
+      - key: SCREENER_TOKEN_SECRET
+        sync: false
       # Set this to the already-registered, verified Product Owner email in Render.
       # Public registration intentionally always creates a normal user.
       - key: SCREENER_PRODUCT_OWNER_EMAIL
+        sync: false
+      # A stable product-owner user id lets the account be recreated with the
+      # SAME id after the ephemeral DB resets, so PO sessions survive restarts.
+      - key: SCREENER_PRODUCT_OWNER_USER_ID
         sync: false
       # Required only when the account does not exist yet. Use 12-128 characters.
       - key: SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD
