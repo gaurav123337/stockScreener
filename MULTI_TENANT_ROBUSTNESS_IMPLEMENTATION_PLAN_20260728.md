@@ -169,3 +169,13 @@ api.py (FastAPI) → services/ → core/ → infrastructure/
 
 - `tests/test_multi_tenant.py` and `tests/test_control_center.py`: 19 passed.
 - `tests/test_provider_switching.py` and `tests/test_indian_provider_adapter.py`: 26 passed.
+
+## Update - 22-08-2026 (hidden bug fixes)
+
+- Removed the embedded Indian API credential; deployment configuration is now required.
+- Scoped verification reports to the requesting user plus published system backtest records.
+- Changed scan execution to convert an individual analysis exception into a failed symbol result.
+- Made malformed stored preference JSON fail closed to an empty preference object.
+- Rejected token secrets shorter than 32 characters in production.
+
+Broker credentials and learned knowledge still require a dedicated per-user storage migration before they can be considered tenant-isolated.

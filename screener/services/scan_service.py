@@ -4,11 +4,11 @@ Eliminates the duplication between main.py:_scan_row and api.py:_rec_to_dict.
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from screener.core.config import AppConfig, config
-from screener.core.models import Recommendation, ScanResult
+from screener.core.models import Action, Recommendation, ScanResult
 from screener.services.analysis_service import AnalysisService
 
 
@@ -34,13 +34,26 @@ class ScanService:
         symbols = symbols or effective_config.default_universe
         workers = max_workers or effective_config.data.max_workers
 
+        recommendations_by_symbol: dict[str, Recommendation] = {}
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            recommendations = list(
-                ex.map(
-                    lambda symbol: self._analysis.analyze(symbol, app_config),
-                    symbols,
-                )
-            )
+            futures = {
+                ex.submit(self._analysis.analyze, symbol, effective_config): symbol
+                for symbol in symbols
+            }
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    recommendations_by_symbol[symbol] = future.result()
+                except Exception as error:
+                    recommendations_by_symbol[symbol] = Recommendation(
+                        symbol=symbol.upper(),
+                        action=Action.NEUTRAL,
+                        score=0.0,
+                        price=0.0,
+                        error=str(error) or "analysis failed",
+                    )
+
+        recommendations = [recommendations_by_symbol[symbol] for symbol in symbols]
 
         # Prediction logging happens at the API/CLI layer so the authenticated
         # user_id can be attached (see api.py / main.py).

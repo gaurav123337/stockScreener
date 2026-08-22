@@ -42,6 +42,8 @@ def _get_secret() -> bytes:
         or os.getenv("SCREENER_AUTH_SECRET", "").strip()
     )
     if from_env:
+        if os.getenv("SCREENER_ENVIRONMENT", "development").strip().lower() == "production" and len(from_env) < 32:
+            raise RuntimeError("SCREENER_TOKEN_SECRET must be at least 32 characters in production")
         try:
             return bytes.fromhex(from_env)
         except ValueError:
@@ -468,8 +470,19 @@ class UserStore:
             tier=row["tier"] if "tier" in row.keys() else "free",
             last_login_at=datetime.fromisoformat(row["last_login_at"]) if "last_login_at" in row.keys() and row["last_login_at"] else None,
             token_version=int(row["token_version"]) if "token_version" in row.keys() else 0,
-            preferences=json.loads(row["preferences"]) if row["preferences"] else {},
+            preferences=_decode_preferences(row["preferences"]),
         )
+
+
+def _decode_preferences(value: str | None) -> dict[str, Any]:
+    """Return valid preference data without letting a corrupt row break auth."""
+    if not value:
+        return {}
+    try:
+        decoded = json.loads(value)
+    except (TypeError, ValueError):
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
 
 
 # Global user store instance
