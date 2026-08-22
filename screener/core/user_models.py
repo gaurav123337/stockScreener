@@ -37,7 +37,10 @@ def _get_secret() -> bytes:
        previously-issued tokens.
     2. The on-disk ``data/.secret_key`` file (existing behaviour).
     """
-    from_env = os.getenv("SCREENER_TOKEN_SECRET", "").strip()
+    from_env = (
+        os.getenv("SCREENER_TOKEN_SECRET", "").strip()
+        or os.getenv("SCREENER_AUTH_SECRET", "").strip()
+    )
     if from_env:
         try:
             return bytes.fromhex(from_env)
@@ -213,7 +216,12 @@ class UserStore:
 
     def __init__(self, db_path: Path | None = None):
         if db_path is None:
-            db_path = Path(__file__).resolve().parent.parent.parent / "data" / "users.db"
+            configured_path = os.getenv("SCREENER_USER_DB_PATH")
+            db_path = (
+                Path(configured_path)
+                if configured_path
+                else Path(__file__).resolve().parent.parent.parent / "data" / "users.db"
+            )
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db_path = str(db_path)
         self._init_db()

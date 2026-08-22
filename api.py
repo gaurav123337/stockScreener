@@ -855,7 +855,7 @@ def scan(body: ScanBody, user: UserProfile = Depends(get_current_user)):
     prefs = get_service(PreferencesService)
     effective_config = prefs.get_effective_config(user.user_id)
 
-    # Use user's watchlist if no symbols specified
+    # Use the user's saved watchlist, then their effective configured universe.
     symbols = body.symbols
     if not symbols:
         symbols = prefs.get_watchlist(user.user_id)

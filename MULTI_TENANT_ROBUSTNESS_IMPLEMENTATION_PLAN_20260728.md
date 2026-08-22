@@ -13,6 +13,7 @@ Transform stockScreener from a single-user application into a **multi-tenant pla
 ## Current State Analysis
 
 ### What exists today
+
 - **Single global config** (`screener/core/config.py`) — one `user_config.json` for everyone; no concept of users.
 - **No authentication** — all API endpoints are open; no sessions, no tokens.
 - **No per-user data isolation** — predictions, broker settings, knowledge are shared.
@@ -21,6 +22,7 @@ Transform stockScreener from a single-user application into a **multi-tenant pla
 - **No graceful degradation** — if Yahoo Finance is down, the API returns raw exceptions.
 
 ### Architecture (v0.3.0)
+
 ```
 api.py (FastAPI) → services/ → core/ → infrastructure/
 ```
@@ -30,69 +32,78 @@ api.py (FastAPI) → services/ → core/ → infrastructure/
 ## Implementation Phases
 
 ### Phase 1: Multi-Tenant Foundation (Backend)
-| # | Task | Files | Details |
-|---|------|-------|---------|
-| 1.1 | User model + database | `screener/core/user_models.py` | Pydantic model for user, SQLite-backed store |
-| 1.2 | Auth service | `screener/services/auth_service.py` | Register, login, logout, token generation/validation (JWT-style) |
-| 1.3 | Per-user preferences store | `screener/services/preferences_service.py` | CRUD for per-user settings (scoring, risk, watchlist, etc.) |
-| 1.4 | Auth middleware | `api.py` | Dependency injection to extract & validate tokens, inject user context |
-| 1.5 | Per-user config scoping | `screener/core/config.py` | `get_user_config(user_id)` — overlay user prefs on defaults |
+
+| #   | Task                       | Files                                      | Details                                                                |
+| --- | -------------------------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+| 1.1 | User model + database      | `screener/core/user_models.py`             | Pydantic model for user, SQLite-backed store                           |
+| 1.2 | Auth service               | `screener/services/auth_service.py`        | Register, login, logout, token generation/validation (JWT-style)       |
+| 1.3 | Per-user preferences store | `screener/services/preferences_service.py` | CRUD for per-user settings (scoring, risk, watchlist, etc.)            |
+| 1.4 | Auth middleware            | `api.py`                                   | Dependency injection to extract & validate tokens, inject user context |
+| 1.5 | Per-user config scoping    | `screener/core/config.py`                  | `get_user_config(user_id)` — overlay user prefs on defaults            |
 
 ### Phase 2: Robustness Layer (Backend)
-| # | Task | Files | Details |
-|---|------|-------|---------|
-| 2.1 | Global exception handler | `api.py` | Catch all unhandled exceptions → structured JSON error |
-| 2.2 | Standardized error responses | `screener/core/responses.py` | `ApiResponse`, `ErrorResponse` models with codes |
-| 2.3 | Input validation middleware | `api.py` | Content-length limits, JSON body validation, request timeouts |
-| 2.4 | Service-level error wrapping | All services | Never raise raw exceptions; return `Result` types with error messages |
-| 2.5 | Graceful degradation | `screener/infrastructure/data/yahoo_provider.py` | Timeout, retry, circuit-breaker for external data calls |
+
+| #   | Task                         | Files                                            | Details                                                               |
+| --- | ---------------------------- | ------------------------------------------------ | --------------------------------------------------------------------- |
+| 2.1 | Global exception handler     | `api.py`                                         | Catch all unhandled exceptions → structured JSON error                |
+| 2.2 | Standardized error responses | `screener/core/responses.py`                     | `ApiResponse`, `ErrorResponse` models with codes                      |
+| 2.3 | Input validation middleware  | `api.py`                                         | Content-length limits, JSON body validation, request timeouts         |
+| 2.4 | Service-level error wrapping | All services                                     | Never raise raw exceptions; return `Result` types with error messages |
+| 2.5 | Graceful degradation         | `screener/infrastructure/data/yahoo_provider.py` | Timeout, retry, circuit-breaker for external data calls               |
 
 ### Phase 3: API Endpoint Updates
-| # | Task | Files | Details |
-|---|------|-------|---------|
-| 3.1 | Auth endpoints | `api.py` | `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout` |
-| 3.2 | Preferences endpoints | `api.py` | `GET/PUT /api/preferences` (per-user settings) |
-| 3.3 | Protect existing endpoints | `api.py` | All `/api/*` endpoints require valid token; inject user context |
-| 3.4 | Per-user settings | `api.py` | `/api/settings` reads/writes user-specific overrides |
+
+| #   | Task                       | Files    | Details                                                                    |
+| --- | -------------------------- | -------- | -------------------------------------------------------------------------- |
+| 3.1 | Auth endpoints             | `api.py` | `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout` |
+| 3.2 | Preferences endpoints      | `api.py` | `GET/PUT /api/preferences` (per-user settings)                             |
+| 3.3 | Protect existing endpoints | `api.py` | All `/api/*` endpoints require valid token; inject user context            |
+| 3.4 | Per-user settings          | `api.py` | `/api/settings` reads/writes user-specific overrides                       |
 
 ### Phase 4: Frontend Updates
-| # | Task | Files | Details |
-|---|------|-------|---------|
-| 4.1 | Auth context + pages | `frontend/src/features/auth/` | Login, Register, Logout |
-| 4.2 | Token management | `frontend/src/api/client.ts` | Store token, attach to requests, handle 401 |
-| 4.3 | Preferences UI | `frontend/src/features/settings/` | User-specific settings page |
-| 4.4 | Error boundary | `frontend/src/app/` | Global error boundary, toast notifications for API errors |
-| 4.5 | Route guards | `frontend/src/app/router.tsx` | Redirect to login when unauthenticated |
+
+| #   | Task                 | Files                             | Details                                                   |
+| --- | -------------------- | --------------------------------- | --------------------------------------------------------- |
+| 4.1 | Auth context + pages | `frontend/src/features/auth/`     | Login, Register, Logout                                   |
+| 4.2 | Token management     | `frontend/src/api/client.ts`      | Store token, attach to requests, handle 401               |
+| 4.3 | Preferences UI       | `frontend/src/features/settings/` | User-specific settings page                               |
+| 4.4 | Error boundary       | `frontend/src/app/`               | Global error boundary, toast notifications for API errors |
+| 4.5 | Route guards         | `frontend/src/app/router.tsx`     | Redirect to login when unauthenticated                    |
 
 ### Phase 5: Testing & Validation
-| # | Task | Files | Details |
-|---|------|-------|---------|
-| 5.1 | Unit tests for auth | `tests/test_auth.py` | Register, login, token validation |
-| 5.2 | Unit tests for preferences | `tests/test_preferences.py` | Per-user CRUD |
-| 5.3 | Integration tests | `tests/test_multi_tenant.py` | End-to-end multi-user scenarios |
-| 5.4 | Robustness tests | `tests/test_robustness.py` | Error injection, timeout handling |
+
+| #   | Task                       | Files                        | Details                           |
+| --- | -------------------------- | ---------------------------- | --------------------------------- |
+| 5.1 | Unit tests for auth        | `tests/test_auth.py`         | Register, login, token validation |
+| 5.2 | Unit tests for preferences | `tests/test_preferences.py`  | Per-user CRUD                     |
+| 5.3 | Integration tests          | `tests/test_multi_tenant.py` | End-to-end multi-user scenarios   |
+| 5.4 | Robustness tests           | `tests/test_robustness.py`   | Error injection, timeout handling |
 
 ---
 
 ## Technical Considerations
 
 ### Data Storage
+
 - **SQLite** (single-file, zero-config) for user accounts and per-user preferences.
 - File: `data/users.db` — created automatically on first run.
 - Per-user config stored as JSON blobs keyed by `user_id`.
 
 ### Authentication
+
 - **Token-based auth** (JWT-like, signed with a server secret).
 - Token stored in `localStorage` on frontend; sent via `Authorization: Bearer <token>` header.
 - Tokens expire after 7 days (configurable).
 - No password hashing with external library — use `hashlib.pbkdf2_hmac` (stdlib).
 
 ### Backward Compatibility
+
 - **CLI mode** (`main.py`) continues to work without auth (single-user fallback).
 - Existing `config` behavior is preserved as the "system default"; user prefs overlay on top.
 - If no users exist, the API creates a default `guest` user automatically.
 
 ### Robustness Principles
+
 1. **Never crash** — every exception is caught and converted to a structured JSON error.
 2. **Always validate** — every input is validated before processing.
 3. **Graceful degradation** — if external data fails, return cached/default data with a warning, not a 500.
@@ -144,3 +155,17 @@ api.py (FastAPI) → services/ → core/ → infrastructure/
 - Prediction history, broker credentials/connections, and learned knowledge are still shared infrastructure and require tenant keys or tenant-specific repositories before they can be considered isolated.
 - Request size limits, end-to-end timeouts, external-provider circuit breaking, and broader API integration tests remain open robustness work.
 - Guest fallback remains enabled for backward compatibility; strict authentication for all tenant data requires a product decision and migration plan.
+
+## Update - 22-08-2026
+
+### Reliability fixes
+
+- Added `SCREENER_AUTH_SECRET` support so deployments can retain token validity across process restarts and instances.
+- Added `SCREENER_USER_DB_PATH` support for deployments that provide a mounted or external-backed SQLite location; the default remains `data/users.db` for local development.
+- Fixed the preference watchlist fallback to use the user's effective `default_universe`, including user overrides.
+- Aligned the frontend `ScanResponse.failed` type with the backend's `{symbol, error}` objects.
+
+### Validation
+
+- `tests/test_multi_tenant.py` and `tests/test_control_center.py`: 19 passed.
+- `tests/test_provider_switching.py` and `tests/test_indian_provider_adapter.py`: 26 passed.
