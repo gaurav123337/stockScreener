@@ -163,7 +163,9 @@ export function AppLayout() {
   const { isPro } = useEntitlements();
   const { theme, toggleTheme } = useTheme();
   const { fontSize, increaseFontSize, decreaseFontSize, canIncrease, canDecrease } = useFontSize();
+  const location = useLocation();
   const navigate = useNavigate();
+  const isAuthRoute = location.pathname.startsWith("/auth/");
 
   function handleLogout() {
     logout();
@@ -257,7 +259,7 @@ export function AppLayout() {
               </button>
             </div>
             <SecondaryNavigation />
-            {isLoggedIn ? (
+            {isLoggedIn && !isAuthRoute ? (
               <button
                 type="button"
                 className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-2.5 text-sm font-semibold text-ink hover:bg-surface-raised"

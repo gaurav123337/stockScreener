@@ -129,13 +129,18 @@ class VerificationService:
 
     # --------------------------------------------------------------- evaluation
 
-    def verify(self) -> VerificationReport:
+    def verify(self, user_id: str | None = None) -> VerificationReport:
         """Evaluate every logged signal over each configured horizon.
 
         The window is rolling: predictions whose horizon has not elapsed yet are
         excluded, and the numbers change as more history accrues.
         """
         records = self._repo.get_all()
+        if user_id is not None:
+            records = [
+                record for record in records
+                if record.user_id in {user_id, self.BACKTEST_USER}
+            ]
         today = date.today()
         horizons = list(config.verification.horizons)
 

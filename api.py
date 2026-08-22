@@ -1052,7 +1052,7 @@ def verify(user: UserProfile = Depends(get_current_user)):
     """
     verification = get_service(VerificationService)
     try:
-        return verification.verify().model_dump(mode="json")
+        return verification.verify(user.user_id).model_dump(mode="json")
     except Exception as e:
         raise DataSourceError(f"Verification failed: {e}")
 
