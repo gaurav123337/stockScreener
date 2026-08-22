@@ -142,7 +142,11 @@ class ControlCenterService:
         user = self._users.get_by_id(user_id) if user_id else self._users.get_by_email(email)
         if not user:
             password = os.getenv("SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD", "")
-            if user_id or not password:
+            # A configured stable user_id with a bootstrap password lets the
+            # account be recreated with the SAME id after the DB is wiped
+            # (ephemeral filesystems). Otherwise require a pre-registered,
+            # verified account.
+            if (user_id and not password) or (not user_id and not password):
                 raise RuntimeError(
                     "Configured product-owner account was not found; register and verify it first, "
                     "or configure SCREENER_PRODUCT_OWNER_INITIAL_PASSWORD with the email bootstrap"
@@ -159,7 +163,7 @@ class ControlCenterService:
                 username = f"{username[:35]}-owner-{uuid4().hex[:8]}"
             password_hash, password_salt = hash_password(password)
             user = self._users.create_user(UserRecord(
-                user_id=str(uuid4()),
+                user_id=user_id or str(uuid4()),
                 username=username,
                 email=email,
                 normalized_email=email,
