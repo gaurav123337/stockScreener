@@ -37,6 +37,7 @@ function hasMessage(data: unknown): data is ErrorPayload {
 
 const TOKEN_KEY = "stockScreener_token";
 const USER_KEY = "stockScreener_user";
+export const AUTH_STATE_CHANGED_EVENT = "stockScreener:auth-state-changed";
 
 // In-memory mirror of the token/user. Some embedding contexts (sandboxed
 // iframes, private browsing) make localStorage unavailable or throw on
@@ -111,6 +112,9 @@ export function setStoredUser(
 export function clearAuth(): void {
   setToken(null);
   setStoredUser(null);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT));
+  }
 }
 
 // ------------------------------------------------------------------ //

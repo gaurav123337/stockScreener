@@ -1,4 +1,11 @@
-import { clearAuth, getStoredUser, getToken, setStoredUser, setToken } from "@/api/client";
+import {
+  AUTH_STATE_CHANGED_EVENT,
+  clearAuth,
+  getStoredUser,
+  getToken,
+  setStoredUser,
+  setToken,
+} from "@/api/client";
 import { api } from "@/api/endpoints";
 import { queryClient } from "@/app/queryClient";
 import type { UserProfile } from "@/types/api";
@@ -32,6 +39,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshUser();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const handleAuthStateChange = () => {
+      setUser(null);
+      queryClient.clear();
+    };
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthStateChange);
+    return () => window.removeEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthStateChange);
+  }, []);
 
   const isLoggedIn = user !== null && user.username !== "guest";
   const isGuest = !isLoggedIn;
