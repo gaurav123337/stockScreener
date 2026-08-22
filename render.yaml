@@ -9,6 +9,9 @@ services:
     envVars:
       - key: SCREENER_ENVIRONMENT
         value: production
+      # Keep the signing key stable across container restarts.
+      - key: SCREENER_AUTH_SECRET
+        sync: false
       # Set this to the already-registered, verified Product Owner email in Render.
       # Public registration intentionally always creates a normal user.
       - key: SCREENER_PRODUCT_OWNER_EMAIL

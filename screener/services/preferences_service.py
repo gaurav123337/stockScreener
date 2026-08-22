@@ -151,7 +151,7 @@ class PreferencesService:
     def get_watchlist(self, user_id: str) -> list[str]:
         """Get the user's personal watchlist (stored in preferences)."""
         prefs = self.get_preferences(user_id)
-        return prefs.get("watchlist", config.default_universe)
+        return prefs.get("watchlist", self.get_effective_config(user_id).default_universe)
 
     def set_watchlist(self, user_id: str, symbols: list[str]) -> list[str]:
         """Set the user's personal watchlist."""

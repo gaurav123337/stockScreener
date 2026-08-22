@@ -296,7 +296,7 @@ export interface ScanRequest {
 
 export interface ScanResponse {
   count: number;
-  failed: string[];
+  failed: Array<{ symbol: string; error: string }>;
   results: ScanRow[];
   /** Phase-0 trust/freshness envelope (see api.py /api/scan). */
   universe_size: number;

@@ -25,6 +25,13 @@ _TOKEN_EXPIRY_DAYS = 7
 
 def _get_secret() -> bytes:
     """Get or create the server secret key for token signing."""
+    configured = os.getenv("SCREENER_AUTH_SECRET")
+    if configured:
+        try:
+            return bytes.fromhex(configured)
+        except ValueError:
+            return configured.encode("utf-8")
+
     secret_file = Path(__file__).resolve().parent.parent.parent / "data" / ".secret_key"
     if secret_file.exists():
         return secret_file.read_bytes()
@@ -173,7 +180,12 @@ class UserStore:
 
     def __init__(self, db_path: Path | None = None):
         if db_path is None:
-            db_path = Path(__file__).resolve().parent.parent.parent / "data" / "users.db"
+            configured_path = os.getenv("SCREENER_USER_DB_PATH")
+            db_path = (
+                Path(configured_path)
+                if configured_path
+                else Path(__file__).resolve().parent.parent.parent / "data" / "users.db"
+            )
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db_path = str(db_path)
         self._init_db()
