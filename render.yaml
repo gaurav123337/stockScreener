@@ -6,6 +6,14 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     autoDeployTrigger: commit
+    # NOTE: Render's free plan does NOT support persistent disks, so config
+    # edits, knowledge-base updates, and registered users are wiped on every
+    # restart/wake. Upgrade to a paid plan and uncomment the `disk` block
+    # below to make them persist.
+    # disk:
+    #   name: data
+    #   mountPath: /data
+    #   sizeGB: 1
     envVars:
       - key: SCREENER_ENVIRONMENT
         value: production
@@ -15,6 +23,15 @@ services:
       # Generate once, e.g. `openssl rand -hex 32`, and keep it fixed.
       - key: SCREENER_TOKEN_SECRET
         sync: false
+      # Point runtime state (config DB, user DB, knowledge base) at the
+      # persistent disk so edits survive restarts. Uncomment with the disk
+      # block above.
+      # - key: SCREENER_DATA_DIR
+      #   value: /data
+      # - key: SCREENER_KNOWLEDGE_GRAPH_DIR
+      #   value: /data/knowledge_graph
+      # - key: SCREENER_KNOWLEDGE_DIR
+      #   value: /data/knowledge
       # Set this to the already-registered, verified Product Owner email in Render.
       # Public registration intentionally always creates a normal user.
       - key: SCREENER_PRODUCT_OWNER_EMAIL
